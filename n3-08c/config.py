@@ -4,14 +4,17 @@ DATAROOT có thể override bằng biến môi trường NUSCENES_DATAROOT.
 """
 import os
 
+# Thư mục gốc repo (cha của n3-08c\), không phụ thuộc vị trí clone
+PROJECT_ROOT: str = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 # ===== Dataset =====
-DATAROOT: str = os.environ.get("NUSCENES_DATAROOT", r"C:\nuscenes-project\datasets\nuscenes")
+DATAROOT: str = os.environ.get("NUSCENES_DATAROOT", os.path.join(PROJECT_ROOT, "datasets", "nuscenes"))
 
 VERSION: str = "v1.0-mini"
 LIDAR_CHANNEL: str = "LIDAR_TOP"
 
 # ===== Output paths =====
-OUTPUT_DIR: str = r"C:\nuscenes-project\output"
+OUTPUT_DIR: str = os.environ.get("N308C_OUTPUT_DIR", os.path.join(PROJECT_ROOT, "output"))
 TEMPLATE_DIR: str = os.path.join(OUTPUT_DIR, "templates")    # object templates (object-local frame)
 AUGMENTED_DIR: str = os.path.join(OUTPUT_DIR, "augmented")   # Task A: scene sau khi chèn object
 WEATHER_DIR: str = os.path.join(OUTPUT_DIR, "weather")       # Task B: scene sau khi mô phỏng thời tiết

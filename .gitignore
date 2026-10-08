@@ -1,6 +1,12 @@
-﻿datasets/
+﻿# Dữ liệu nuScenes (~5.5 GB) — mỗi người tự tải, xem HUONG_DAN.md mục 2
+datasets/
+# Virtualenv — mỗi người tự tạo
 nuscenes-env/
+.venv/
+# Kết quả sinh ra khi chạy (kết quả mẫu nằm trong docs/ket_qua_mau/)
 output/
 __pycache__/
 *.pyc
+.pytest_cache/
 .vscode/
+.idea/

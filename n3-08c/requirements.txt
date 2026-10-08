@@ -1,8 +1,10 @@
-nuscenes-devkit
-numpy
-open3d
-scipy
-shapely
-matplotlib
-pyquaternion
-tqdm
+# Python 3.10 (đã test với 3.10.11)
+nuscenes-devkit==1.2.0
+numpy==1.26.4
+open3d==0.20.0
+scipy==1.15.3
+shapely==2.0.7
+matplotlib==3.10.9
+pyquaternion==0.9.9
+tqdm==4.70.1
+pytest
