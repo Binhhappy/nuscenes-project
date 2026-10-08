@@ -1,0 +1,8 @@
+nuscenes-devkit
+numpy
+open3d
+scipy
+shapely
+matplotlib
+pyquaternion
+tqdm
