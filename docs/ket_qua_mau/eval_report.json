@@ -12,8 +12,8 @@
   "weather/fog_dense": {
     "n_scenes": 1,
     "point_count_change": {
-      "mean_ratio": 0.7072762915129152,
-      "mean_diff": -10154.0
+      "mean_ratio": 0.6852225553505535,
+      "mean_diff": -10919.0
     },
     "intensity_stats": {
       "original": {
@@ -21,16 +21,21 @@
         "std": 22.355199813842773
       },
       "augmented": {
-        "mean": 14.872727394104004,
-        "std": 19.915380477905273
+        "mean": 14.951227188110352,
+        "std": 19.820011138916016
       }
+    },
+    "label_ratio": {
+      "original": 0.9268374773865118,
+      "noise": 0.07316252261348816,
+      "puddle": 0.0
     }
   },
   "weather/fog_light": {
     "n_scenes": 1,
     "point_count_change": {
-      "mean_ratio": 0.9495791051660517,
-      "mean_diff": -1749.0
+      "mean_ratio": 0.9485989391143912,
+      "mean_diff": -1783.0
     },
     "intensity_stats": {
       "original": {
@@ -38,16 +43,21 @@
         "std": 22.355199813842773
       },
       "augmented": {
-        "mean": 18.791053771972656,
-        "std": 21.76105308532715
+        "mean": 18.81423568725586,
+        "std": 21.80824089050293
       }
+    },
+    "label_ratio": {
+      "original": 0.9940130679228081,
+      "noise": 0.005986932077191916,
+      "puddle": 0.0
     }
   },
   "weather/fog_moderate": {
     "n_scenes": 1,
     "point_count_change": {
-      "mean_ratio": 0.8422797509225092,
-      "mean_diff": -5471.0
+      "mean_ratio": 0.8332564575645757,
+      "mean_diff": -5784.0
     },
     "intensity_stats": {
       "original": {
@@ -55,16 +65,87 @@
         "std": 22.355199813842773
       },
       "augmented": {
-        "mean": 16.898849487304688,
-        "std": 20.753765106201172
+        "mean": 16.909931182861328,
+        "std": 20.8543701171875
       }
+    },
+    "label_ratio": {
+      "original": 0.9770619983393302,
+      "noise": 0.022938001660669803,
+      "puddle": 0.0
+    }
+  },
+  "weather/rain+wet_road_heavy": {
+    "n_scenes": 1,
+    "point_count_change": {
+      "mean_ratio": 0.6210216789667896,
+      "mean_diff": -13146.0
+    },
+    "intensity_stats": {
+      "original": {
+        "mean": 19.851158142089844,
+        "std": 22.355199813842773
+      },
+      "augmented": {
+        "mean": 15.208083152770996,
+        "std": 21.361604690551758
+      }
+    },
+    "label_ratio": {
+      "original": 0.8393371089035373,
+      "noise": 0.14404419273976418,
+      "puddle": 0.016618698356698543
+    }
+  },
+  "weather/rain+wet_road_light": {
+    "n_scenes": 1,
+    "point_count_change": {
+      "mean_ratio": 0.9200011531365314,
+      "mean_diff": -2775.0
+    },
+    "intensity_stats": {
+      "original": {
+        "mean": 19.851158142089844,
+        "std": 22.355199813842773
+      },
+      "augmented": {
+        "mean": 17.654224395751953,
+        "std": 21.14820098876953
+      }
+    },
+    "label_ratio": {
+      "original": 0.9627737912449472,
+      "noise": 0.03233791871651051,
+      "puddle": 0.0048882900385422865
+    }
+  },
+  "weather/rain+wet_road_moderate": {
+    "n_scenes": 1,
+    "point_count_change": {
+      "mean_ratio": 0.8564921586715867,
+      "mean_diff": -4978.0
+    },
+    "intensity_stats": {
+      "original": {
+        "mean": 19.851158142089844,
+        "std": 22.355199813842773
+      },
+      "augmented": {
+        "mean": 16.169010162353516,
+        "std": 20.812368392944336
+      }
+    },
+    "label_ratio": {
+      "original": 0.9159542241669472,
+      "noise": 0.07973746213396163,
+      "puddle": 0.004308313699091215
     }
   },
   "weather/rain_heavy": {
     "n_scenes": 1,
     "point_count_change": {
-      "mean_ratio": 0.8199089022140221,
-      "mean_diff": -6247.0
+      "mean_ratio": 0.8459409594095941,
+      "mean_diff": -5344.0
     },
     "intensity_stats": {
       "original": {
@@ -72,16 +153,21 @@
         "std": 22.355199813842773
       },
       "augmented": {
-        "mean": 12.47797966003418,
-        "std": 17.831783294677734
+        "mean": 14.10959243774414,
+        "std": 19.403371810913086
       }
+    },
+    "label_ratio": {
+      "original": 0.8581652126499455,
+      "noise": 0.14183478735005453,
+      "puddle": 0.0
     }
   },
   "weather/rain_light": {
     "n_scenes": 1,
     "point_count_change": {
-      "mean_ratio": 0.9319937730627307,
-      "mean_diff": -2359.0
+      "mean_ratio": 0.9246425276752768,
+      "mean_diff": -2614.0
     },
     "intensity_stats": {
       "original": {
@@ -89,16 +175,21 @@
         "std": 22.355199813842773
       },
       "augmented": {
-        "mean": 17.35898780822754,
-        "std": 20.845844268798828
+        "mean": 17.696924209594727,
+        "std": 21.1608943939209
       }
+    },
+    "label_ratio": {
+      "original": 0.9675749828521544,
+      "noise": 0.032425017147845604,
+      "puddle": 0.0
     }
   },
   "weather/rain_moderate": {
     "n_scenes": 1,
     "point_count_change": {
-      "mean_ratio": 0.8712523062730627,
-      "mean_diff": -4466.0
+      "mean_ratio": 0.8713676199261993,
+      "mean_diff": -4462.0
     },
     "intensity_stats": {
       "original": {
@@ -106,9 +197,146 @@
         "std": 22.355199813842773
       },
       "augmented": {
-        "mean": 15.214570045471191,
-        "std": 19.42438507080078
+        "mean": 16.121774673461914,
+        "std": 20.45543098449707
       }
+    },
+    "label_ratio": {
+      "original": 0.919671805730166,
+      "noise": 0.08032819426983392,
+      "puddle": 0.0
+    }
+  },
+  "weather/snow_heavy": {
+    "n_scenes": 1,
+    "point_count_change": {
+      "mean_ratio": 0.8966789667896679,
+      "mean_diff": -3584.0
+    },
+    "intensity_stats": {
+      "original": {
+        "mean": 19.851158142089844,
+        "std": 22.355199813842773
+      },
+      "augmented": {
+        "mean": 12.969922065734863,
+        "std": 17.09552574157715
+      }
+    },
+    "label_ratio": {
+      "original": 0.7200038580246914,
+      "noise": 0.27999614197530864,
+      "puddle": 0.0
+    }
+  },
+  "weather/snow_light": {
+    "n_scenes": 1,
+    "point_count_change": {
+      "mean_ratio": 0.9623212638376384,
+      "mean_diff": -1307.0
+    },
+    "intensity_stats": {
+      "original": {
+        "mean": 19.851158142089844,
+        "std": 22.355199813842773
+      },
+      "augmented": {
+        "mean": 17.451284408569336,
+        "std": 20.701353073120117
+      }
+    },
+    "label_ratio": {
+      "original": 0.9474551391510141,
+      "noise": 0.05254486084898595,
+      "puddle": 0.0
+    }
+  },
+  "weather/snow_moderate": {
+    "n_scenes": 1,
+    "point_count_change": {
+      "mean_ratio": 0.9313595479704797,
+      "mean_diff": -2381.0
+    },
+    "intensity_stats": {
+      "original": {
+        "mean": 19.851158142089844,
+        "std": 22.355199813842773
+      },
+      "augmented": {
+        "mean": 15.574541091918945,
+        "std": 19.328998565673828
+      }
+    },
+    "label_ratio": {
+      "original": 0.8754139969666017,
+      "noise": 0.12458600303339834,
+      "puddle": 0.0
+    }
+  },
+  "weather/wet_road_heavy": {
+    "n_scenes": 1,
+    "point_count_change": {
+      "mean_ratio": 0.7530846402214022,
+      "mean_diff": -8565.0
+    },
+    "intensity_stats": {
+      "original": {
+        "mean": 19.851158142089844,
+        "std": 22.355199813842773
+      },
+      "augmented": {
+        "mean": 21.204553604125977,
+        "std": 24.088642120361328
+      }
+    },
+    "label_ratio": {
+      "original": 0.9830417639627914,
+      "noise": 0.0,
+      "puddle": 0.01695823603720859
+    }
+  },
+  "weather/wet_road_light": {
+    "n_scenes": 1,
+    "point_count_change": {
+      "mean_ratio": 0.9942631457564576,
+      "mean_diff": -199.0
+    },
+    "intensity_stats": {
+      "original": {
+        "mean": 19.851158142089844,
+        "std": 22.355199813842773
+      },
+      "augmented": {
+        "mean": 19.83429527282715,
+        "std": 22.398136138916016
+      }
+    },
+    "label_ratio": {
+      "original": 0.9964046507582127,
+      "noise": 0.0,
+      "puddle": 0.0035953492417872364
+    }
+  },
+  "weather/wet_road_moderate": {
+    "n_scenes": 1,
+    "point_count_change": {
+      "mean_ratio": 0.8312672970479705,
+      "mean_diff": -5853.0
+    },
+    "intensity_stats": {
+      "original": {
+        "mean": 19.851158142089844,
+        "std": 22.355199813842773
+      },
+      "augmented": {
+        "mean": 19.962753295898438,
+        "std": 23.420602798461914
+      }
+    },
+    "label_ratio": {
+      "original": 0.9653546037801283,
+      "noise": 0.0,
+      "puddle": 0.034645396219871685
     }
   }
 }

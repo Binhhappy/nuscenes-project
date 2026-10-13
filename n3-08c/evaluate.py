@@ -51,23 +51,27 @@ def evaluate_insertion(results_dir: str = config.AUGMENTED_DIR) -> dict:
 def evaluate_weather(original_dir: str, augmented_dir: str) -> dict:
     """So sánh từng cặp <name>.bin giữa original_dir và augmented_dir.
 
-    Returns dict: point_count_change (mean tỉ lệ, mean tuyệt đối), intensity_stats (mean/std trước, sau).
+    Returns dict: point_count_change (mean tỉ lệ, mean tuyệt đối), intensity_stats (mean/std trước, sau),
+    label_ratio (tỉ lệ điểm theo từng nhãn trong <name>_labels.npy, nếu có).
     """
     pairs = [(os.path.join(original_dir, os.path.basename(p)), p)
              for p in sorted(glob.glob(os.path.join(augmented_dir, "*.bin")))]
     pairs = [(o, a) for o, a in pairs if os.path.isfile(o)]
     if not pairs:
         raise FileNotFoundError(f"Không có cặp .bin khớp tên giữa {original_dir} và {augmented_dir}")
-    ratios, diffs, i_orig, i_aug = [], [], [], []
+    ratios, diffs, i_orig, i_aug, labels = [], [], [], [], []
     for o, a in pairs:
         po, pa = load_bin(o), load_bin(a)
         ratios.append(len(pa) / len(po))
         diffs.append(len(pa) - len(po))
         i_orig.append(po[:, 3])
         i_aug.append(pa[:, 3])
+        lab_path = a[:-len(".bin")] + "_labels.npy"
+        if os.path.isfile(lab_path):
+            labels.append(np.load(lab_path))
     i_orig, i_aug = np.concatenate(i_orig), np.concatenate(i_aug)
-    # TODO: thống kê theo dải khoảng cách (0-10, 10-30, 30+ m) và tỉ lệ noise từ *_labels.npy.
-    return {
+    # TODO: thống kê theo dải khoảng cách (0-10, 10-30, 30+ m).
+    report = {
         "n_scenes": len(pairs),
         "point_count_change": {"mean_ratio": float(np.mean(ratios)), "mean_diff": float(np.mean(diffs))},
         "intensity_stats": {
@@ -75,6 +79,10 @@ def evaluate_weather(original_dir: str, augmented_dir: str) -> dict:
             "augmented": {"mean": float(i_aug.mean()), "std": float(i_aug.std())},
         },
     }
+    if labels:
+        lab = np.concatenate(labels)
+        report["label_ratio"] = {name: float(np.mean(lab == v)) for v, name in config.LABEL_NAMES.items()}
+    return report
 
 
 def run_insertion_batch(n_samples: int, num_objects: int = 3) -> None:

@@ -31,9 +31,16 @@ def intensity_colors(points: np.ndarray) -> np.ndarray:
 
 
 def label_colors(labels: np.ndarray) -> np.ndarray:
-    """labels 0 = điểm gốc (xám), !=0 = điểm thêm vào (đỏ)."""
+    """Màu theo nhãn điểm trong config: điểm gốc xám, noise đỏ, điểm trong vũng nước xanh dương.
+
+    Nhãn lạ (khác 0, chưa có trong config.LABEL_NAMES) tô đỏ như noise.
+    """
+    import config
+
+    labels = np.asarray(labels)
     colors = np.tile([0.55, 0.55, 0.55], (len(labels), 1))
-    colors[np.asarray(labels) != 0] = [0.9, 0.1, 0.1]
+    colors[labels != config.LABEL_ORIGINAL] = [0.9, 0.1, 0.1]
+    colors[labels == config.LABEL_PUDDLE] = [0.1, 0.35, 0.9]
     return colors
 
 

@@ -21,7 +21,7 @@ Dự án sinh dữ liệu LiDAR tổng hợp từ nuScenes v1.0-mini:
 ├── output\                     # kết quả sinh ra khi chạy — KHÔNG có trong git
 │   ├── templates\              # template bank (<category>\<ann_token>.npz + bank.json)
 │   ├── augmented\              # Task A: <sample_token>.bin + .json
-│   ├── weather\                # Task B: original\, rain_<level>\, fog_<level>\
+│   ├── weather\                # Task B: original\, <weather>_<level>\ (vd rain_heavy\, snow_light\)
 │   ├── vis\                    # ảnh BEV (.png)
 │   └── eval_report.json        # kết quả evaluate.py
 ├── docs\ket_qua_mau\           # kết quả mẫu để đối chiếu (mục 4)
@@ -43,10 +43,12 @@ Dự án sinh dữ liệu LiDAR tổng hợp từ nuScenes v1.0-mini:
     │   ├── merge.py            # đặt template vào scene, tạo annotation
     │   └── run_insertion.py    # pipeline Task A end-to-end
     ├── task_b\
-    │   ├── rain.py             # mưa: dropout + noise gần sensor + suy giảm intensity
+    │   ├── rain.py             # mưa: dropout theo khoảng cách (mốc 10 m) + noise gần sensor + suy giảm intensity + jitter
     │   ├── fog.py              # sương mù: exp-decay dropout + backscatter
-    │   └── run_weather.py      # pipeline Task B
-    └── tests\                  # test trên data thật (conftest.py tạo fixture nusc)
+    │   ├── wet_road.py         # đường ướt: vũng nước trên mặt đường (mất điểm + giảm intensity)
+    │   ├── snow.py             # tuyết: bông tuyết gần sensor + dropout + suy giảm intensity
+    │   └── run_weather.py      # pipeline Task B (kể cả kết hợp rain+wet_road)
+    └── tests\                  # test trên data thật (conftest.py tạo fixture nusc); test_weather.py không cần dataset
 ```
 
 ---
@@ -195,6 +197,9 @@ Pipeline bên trong (`run_insertion`):
 ```powershell
 python task_b/run_weather.py                                    # sample[0], rain moderate
 python task_b/run_weather.py --weather fog --level dense
+python task_b/run_weather.py --weather snow --level heavy
+python task_b/run_weather.py --weather wet_road --level moderate
+python task_b/run_weather.py --weather rain+wet_road --level heavy    # đường ướt trước, rồi mưa
 python task_b/run_weather.py --all-levels                       # mọi weather x level + ảnh so sánh
 python task_b/run_weather.py --input ..\output\augmented\<tok>.bin --weather rain --level heavy
 ```
@@ -202,13 +207,16 @@ python task_b/run_weather.py --input ..\output\augmented\<tok>.bin --weather rai
 Level:
 - `rain`: `light` / `moderate` / `heavy` (dropout 0.1/0.2/0.3, noise 3/7/12 %).
 - `fog`: `light` / `moderate` / `dense` (visibility 200/50/20 m).
+- `wet_road`: `light` / `moderate` / `heavy` (5/15/30 vũng, bán kính tối đa 2/4/6 m, mất 60/85/95 % điểm mặt đường trong vũng).
+- `snow`: `light` / `moderate` / `heavy` (5/12/25 % beam trúng bông tuyết, mất 10/20/35 % điểm ở 30 m). Tham số tự chọn, chưa hiệu chỉnh với dữ liệu tuyết thật.
+- `rain+wet_road`: `light` / `moderate` / `heavy`, cùng level cho cả hai bước.
 
 `--input` nhận output của Task A, dùng để kết hợp chèn object + thời tiết.
 
 Output (`output\weather\`):
 - `original\<name>.bin` — bản gốc.
 - `<weather>_<level>\<name>.bin` — point cloud sau mô phỏng.
-- `<weather>_<level>\<name>_labels.npy` — `0` = điểm gốc, `1` = noise/backscatter.
+- `<weather>_<level>\<name>_labels.npy` — `0` = điểm gốc, `1` = noise (giọt mưa / backscatter / bông tuyết), `2` = điểm gốc còn lại trong vũng nước. Hằng số: `config.LABEL_*`.
 - `output\vis\weather_<name>.png` — ảnh BEV so sánh.
 
 ### Bước 4 — Đánh giá
@@ -263,16 +271,29 @@ Kết quả đánh giá insertion (6 scene):
 
 Sample `ca9a282c...` (sample[0]), point cloud gốc khoảng 34 700 điểm, intensity trung bình 19.85.
 
-| Weather / level | Tỉ lệ điểm còn lại | Số điểm thay đổi | Intensity TB sau |
-|---|---|---|---|
-| rain light | 0.932 | -2 359 | 17.36 |
-| rain moderate | 0.871 | -4 466 | 15.21 |
-| rain heavy | 0.820 | -6 247 | 12.48 |
-| fog light | 0.950 | -1 749 | 18.79 |
-| fog moderate | 0.842 | -5 471 | 16.90 |
-| fog dense | 0.707 | -10 154 | 14.87 |
+| Weather / level | Tỉ lệ điểm còn lại | Số điểm thay đổi | Intensity TB sau | Tỉ lệ noise | Tỉ lệ điểm vũng nước |
+|---|---|---|---|---|---|
+| rain light | 0.925 | -2 614 | 17.70 | 3.2% | 0.0% |
+| rain moderate | 0.871 | -4 462 | 16.12 | 8.0% | 0.0% |
+| rain heavy | 0.846 | -5 344 | 14.11 | 14.2% | 0.0% |
+| fog light | 0.949 | -1 783 | 18.81 | 0.6% | 0.0% |
+| fog moderate | 0.833 | -5 784 | 16.91 | 2.3% | 0.0% |
+| fog dense | 0.685 | -10 919 | 14.95 | 7.3% | 0.0% |
+| wet_road light | 0.994 | -199 | 19.83 | 0.0% | 0.4% |
+| wet_road moderate | 0.831 | -5 853 | 19.96 | 0.0% | 3.5% |
+| wet_road heavy | 0.753 | -8 565 | 21.20 | 0.0% | 1.7% |
+| snow light | 0.962 | -1 307 | 17.45 | 5.3% | 0.0% |
+| snow moderate | 0.931 | -2 381 | 15.57 | 12.5% | 0.0% |
+| snow heavy | 0.897 | -3 584 | 12.97 | 28.0% | 0.0% |
+| rain+wet_road light | 0.920 | -2 775 | 17.65 | 3.2% | 0.5% |
+| rain+wet_road moderate | 0.856 | -4 978 | 16.17 | 8.0% | 0.4% |
+| rain+wet_road heavy | 0.621 | -13 146 | 15.21 | 14.4% | 1.7% |
 
-Cách đọc: level càng nặng thì càng mất nhiều điểm và intensity càng giảm. Kết quả sai nếu không theo xu hướng này.
+Hai cột cuối là `label_ratio` trong `eval_report.json`: phần điểm đầu ra mang nhãn noise / nhãn vũng nước.
+
+Cách đọc:
+- `rain`, `fog`, `snow`, `rain+wet_road`: level càng nặng thì càng mất nhiều điểm và intensity càng giảm. Kết quả sai nếu không theo xu hướng này.
+- `wet_road`: chỉ mất điểm mặt đường trong vũng; intensity TB toàn cảnh tăng nhẹ vì điểm mặt đường có intensity thấp. Kết quả phụ thuộc mạnh vào vị trí vũng (seed): một vũng lớn rơi sát xe làm mất rất nhiều điểm, như ở level moderate và heavy trong bảng này.
 
 ![Task B](docs/ket_qua_mau/weather_ca9a282c9e77460f8360f564131a8af5.png)
 
@@ -293,19 +314,22 @@ python task_a/placement.py
 python task_a/merge.py
 python task_b/rain.py
 python task_b/fog.py
+python task_b/wet_road.py
+python task_b/snow.py
 ```
 
 ---
 
 ## 6. Test
 
-Test chạy trên data thật (cần dataset + map expansion). `pytest` đã có trong `requirements.txt`.
+Test chạy trên data thật (cần dataset + map expansion), riêng `test_weather.py` dùng point cloud tổng hợp nên chạy được khi chưa có dataset. `pytest` đã có trong `requirements.txt`.
 
 ```powershell
 pytest tests/
 python tests/test_utils.py          # chạy riêng từng file, không cần pytest
 python tests/test_ground_plane.py
 python tests/test_extract_object.py
+python tests/test_weather.py        # không cần dataset
 ```
 
 | File | Kiểm tra |
@@ -313,6 +337,7 @@ python tests/test_extract_object.py
 | `test_utils.py` | loader, transforms khớp nuScenes devkit; vẽ BEV |
 | `test_ground_plane.py` | RANSAC trên dữ liệu tổng hợp, GroundModel theo dốc, sai số với đáy box thật, map area |
 | `test_extract_object.py` | template nằm trong box, roundtrip local frame, ground margin, save/load, build bank |
+| `test_weather.py` | rain, wet_road, snow, run_weather trên point cloud tổng hợp: format đầu ra, nhãn, cùng seed cùng kết quả, level nặng hơn mất nhiều điểm hơn, điểm ngoài vũng nước giữ nguyên |
 
 Trước khi push code, chạy `pytest tests/` và đảm bảo không có test fail.
 
@@ -331,7 +356,9 @@ Trước khi push code, chạy `pytest tests/` và đảm bảo không có test 
 | | `MIN_TEMPLATE_POINTS`, `TEMPLATE_GROUND_MARGIN`, `TEMPLATE_CATEGORIES` | lọc template |
 | | `GROUND` | tham số RANSAC + GroundModel |
 | | `PLACEMENT_LAYERS`, `DEFAULT_LAYERS` | map layer hợp lệ theo category |
-| Task B | `RAIN_LEVELS`, `FOG_VISIBILITY` | thêm level mới ở đây |
+| Task B | `RAIN_LEVELS`, `FOG_VISIBILITY`, `WET_ROAD_LEVELS`, `SNOW_LEVELS` | thêm level mới ở đây |
+| | `WET_ROAD_GROUND_TOL` | điểm cao hơn mặt đất cục bộ quá ngưỡng này (m) không tính là mặt đường |
+| | `LABEL_ORIGINAL`, `LABEL_NOISE`, `LABEL_PUDDLE`, `LABEL_NAMES` | mã nhãn trong `_labels.npy`, dùng chung cho mọi weather |
 
 ### Quy ước dữ liệu
 
@@ -370,7 +397,9 @@ Trước khi push code, chạy `pytest tests/` và đảm bảo không có test 
 
 - `merge.py`: xoá điểm target nằm trong box mới; xử lý occlusion (range image).
 - `run_insertion.py`: chọn template theo category / khoảng cách phù hợp target.
-- `rain.py`: mô hình suy giảm vật lý `alpha = 0.01 * R^0.6`.
+- `rain.py`: hiệu chỉnh `ATTENUATION` và `DROPOUT_REF_RANGE` theo dữ liệu mưa thật; gắn noise theo đúng beam của sensor (ring/azimuth có thật) thay vì đều trong cầu.
+- `wet_road.py`: vũng nước theo chỗ trũng của mặt đường thay vì ellipse ngẫu nhiên; điểm ảo phản xạ dưới mặt đường.
+- `snow.py`: hiệu chỉnh `SNOW_LEVELS` và phân bố bông tuyết theo dữ liệu thật.
 - `fog.py`: hiệu chỉnh `BACKSCATTER_REF` theo dữ liệu thật.
-- `run_weather.py`: thêm tuyết, kết hợp mưa + sương.
+- `run_weather.py`: kết hợp với sương mù (`simulate_fog` chưa nhận nhãn đầu vào).
 - `evaluate.py`: lý do reject (off_road / collision), so sánh phân bố points/box, thống kê theo dải khoảng cách.
