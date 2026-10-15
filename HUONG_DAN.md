@@ -31,6 +31,7 @@ Dự án sinh dữ liệu LiDAR tổng hợp từ nuScenes v1.0-mini:
     ├── config.py               # đường dẫn, seed, ngưỡng, tham số ground/weather
     ├── verify_setup.py         # kiểm tra dữ liệu + môi trường
     ├── evaluate.py             # đánh giá Task A + Task B
+    ├── tools\dataset_gap.py    # thống kê thiếu hụt của nuScenes (pain point)
     ├── requirements.txt        # thư viện, đã ghi cố định phiên bản
     ├── utils\
     │   ├── nuscenes_loader.py  # load nuScenes, point cloud, annotations, pose, calib
@@ -55,12 +56,12 @@ Dự án sinh dữ liệu LiDAR tổng hợp từ nuScenes v1.0-mini:
 
 ### 2.1. Yêu cầu
 
-| Thứ | Phiên bản |
-|---|---|
-| Hệ điều hành | Windows 10/11 (lệnh trong tài liệu viết cho PowerShell) |
-| Python | **3.10** (đã test với 3.10.11). Không dùng 3.12+: `open3d==0.20.0` và `numpy==1.26.4` có thể không cài được. |
-| Git | bản bất kỳ |
-| Ổ đĩa trống | khoảng 8 GB (dataset ~5.5 GB, venv ~0.8 GB, output) |
+| Thứ             | Phiên bản                                                                                                                         |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Hệ điều hành | Windows 10/11 (lệnh trong tài liệu viết cho PowerShell)                                                                         |
+| Python           | **3.10** (đã test với 3.10.11). Không dùng 3.12+: `open3d==0.20.0` và `numpy==1.26.4` có thể không cài được. |
+| Git              | bản bất kỳ                                                                                                                       |
+| Ổ đĩa trống  | khoảng 8 GB (dataset ~5.5 GB, venv ~0.8 GB, output)                                                                                |
 
 Kiểm tra: `py -3.10 --version` phải in ra `Python 3.10.x`.
 
@@ -91,6 +92,7 @@ Dữ liệu không có trong git (giấy phép nuScenes không cho phân phối 
 ```
 
 Lưu ý:
+
 - Giải nén `.tgz` bằng 7-Zip hoặc lệnh `tar -xzf v1.0-mini.tgz -C datasets\nuscenes`.
 - File zip map expansion có thể chứa sẵn thư mục `expansion\`, `basemap\`, `prediction\`. Chép cả thư mục `expansion\` vào `datasets\nuscenes\maps\`. Không để thành `maps\expansion\expansion\`.
 
@@ -166,29 +168,37 @@ Template là mảng `(M, 5)` `[x, y, z, intensity, ring]` ở object-local frame
 python task_a/run_insertion.py                                     # demo: sample[0] -> sample[10]
 python task_a/run_insertion.py --source-sample <tok> --target <tok> --num-objects 3 --vis
 python task_a/run_insertion.py --source-ann <ann_token> --target <sample_token>
+python task_a/run_insertion.py --from-bank --categories vehicle.motorcycle human.pedestrian --num-objects 6
+python task_a/run_insertion.py --naive --out-dir ..\output\augmented_naive    # pipeline cũ để so sánh
 ```
 
-| Tham số | Ý nghĩa | Mặc định |
-|---|---|---|
-| `--source-sample` | sample lấy object | `sample[0]` |
-| `--source-ann` | danh sách annotation token cụ thể | — |
-| `--target` | sample token đích | `sample[10]` |
-| `--num-objects` | số object chèn | 3 |
-| `--n-attempts` | số lần thử vị trí mỗi object | 100 |
-| `--seed` | seed RNG | 42 |
-| `--vis` | mở Open3D sau khi chèn | tắt |
+| Tham số            | Ý nghĩa                                                                                    | Mặc định          |
+| ------------------- | -------------------------------------------------------------------------------------------- | -------------------- |
+| `--source-sample` | sample lấy object                                                                           | `sample[0]`        |
+| `--source-ann`    | danh sách annotation token cụ thể                                                         | —                   |
+| `--target`        | sample token đích                                                                          | `sample[10]`       |
+| `--num-objects`   | số object chèn                                                                             | 3                    |
+| `--n-attempts`    | số lần thử vị trí mỗi object                                                           | 100                  |
+| `--seed`          | seed RNG                                                                                     | 42                   |
+| `--categories`    | prefix category của template                                                                | `vehicle`          |
+| `--from-bank`     | lấy template từ template bank (cân bằng category, bỏ template của chính scene đích) | tắt                 |
+| `--naive`         | pipeline cũ: r, yaw ngẫu nhiên, không che khuất (chỉ để so sánh)                    | tắt                 |
+| `--out-dir`       | thư mục ghi`.bin` + `.json`                                                            | `output\augmented` |
+| `--vis`           | mở Open3D sau khi chèn                                                                     | tắt                 |
 
 Output:
+
 - `output\augmented\<target>.bin` — point cloud `(N+M, 5)` float32, sensor frame, cùng format nuScenes.
-- `output\augmented\<target>.json` — annotation mới (sensor + global frame), `n_requested`, `n_inserted`, `elapsed_s`.
+- `output\augmented\<target>.json` — annotation mới (sensor + global frame), `n_requested`, `n_inserted`, `elapsed_s`, `reject_stats` (lý do loại vị trí), `quality` (chỉ số vật lý của từng object chèn).
 - `output\vis\insertion_<target>.png` — ảnh BEV.
 
 Pipeline bên trong (`run_insertion`):
+
 1. `GroundModel.from_points` — ước lượng mặt đất (RANSAC + median z cục bộ).
 2. `get_map_area` — vùng hợp lệ theo category (`PLACEMENT_LAYERS` trong config: xe → `drivable_area`, người → `walkway`, `ped_crossing`).
-3. `sample_valid_position` — random (x, y, yaw) trong vùng, khoảng cách 3–70 m, không chồng box BEV.
-4. `insert_object` — transform template tới vị trí, đáy chạm đất, concat vào scene.
-5. `create_annotation` — sinh annotation mới.
+3. `sample_position_for_template` — **xoay template quanh sensor**: giữ khoảng cách `r` của template (được dời ra xa tối đa ×`MAX_DISTANCE_SCALE`), chọn azimuth `φ` ngẫu nhiên, `yaw = φ − view_angle`. Nhờ vậy mặt có điểm vẫn quay về LiDAR và mật độ điểm đúng khoảng cách. Vị trí bị loại khi: footprint ra ngoài vùng (`off_area`), LiDAR không thấy mặt đất ở đó (`no_ground`), chồng box (`collision`), có vật cản không nhãn trong footprint (`obstacle`).
+4. `insert_object` — đáy chạm đất, rồi áp luật LiDAR: subsample nếu dời ra xa (`(r_cũ/r_mới)²`), gán lại `ring` theo góc ngước, xoá điểm target trong box mới, **che khuất** bằng range image 32 ring × 1084 azimuth (mỗi tia chỉ giữ điểm gần nhất). Object còn < `MIN_VISIBLE_POINTS` điểm thì thử vị trí khác (`occluded`).
+5. `create_annotation` — sinh annotation mới; `num_lidar_pts` = số điểm còn thấy sau che khuất (đếm lại sau khi chèn hết, vì object sau có thể che object trước).
 
 ### Bước 3 — Task B: mô phỏng thời tiết
 
@@ -200,12 +210,14 @@ python task_b/run_weather.py --input ..\output\augmented\<tok>.bin --weather rai
 ```
 
 Level:
+
 - `rain`: `light` / `moderate` / `heavy` (dropout 0.1/0.2/0.3, noise 3/7/12 %).
 - `fog`: `light` / `moderate` / `dense` (visibility 200/50/20 m).
 
 `--input` nhận output của Task A, dùng để kết hợp chèn object + thời tiết.
 
 Output (`output\weather\`):
+
 - `original\<name>.bin` — bản gốc.
 - `<weather>_<level>\<name>.bin` — point cloud sau mô phỏng.
 - `<weather>_<level>\<name>_labels.npy` — `0` = điểm gốc, `1` = noise/backscatter.
@@ -216,10 +228,34 @@ Output (`output\weather\`):
 ```powershell
 python evaluate.py                       # đánh giá kết quả có sẵn trong output\
 python evaluate.py --run-insertion 20    # chạy Task A trên 20 sample rồi đánh giá
+python evaluate.py --run-insertion 20 --naive --augmented-dir ..\output\augmented_naive   # bản cũ để so
 ```
 
 Kết quả in ra màn hình và lưu `output\eval_report.json`:
-- `insertion`: `valid_rate` (inserted / requested), `total_objects`, `scenes_per_hour`, `per_category`.
+
+- `insertion`: `valid_rate` (inserted / requested), `total_objects`, `scenes_per_hour`, `per_category`, `reject_stats`.
+- `insertion.quality` (chỉ số vật lý): `facing_ok_rate` (mặt có điểm quay về sensor), `ground_supported_rate` (đặt ở chỗ LiDAR thấy mặt đất), `density_ratio_median` (số điểm / số điểm object thật cùng lớp, cùng khoảng cách, lấy từ template bank; ~1 là đúng), `visible_ratio_mean`.
+
+Đo trên 30 sample đầu (seed 42), pipeline cũ (`--naive`) so với pipeline mới:
+
+| Chỉ số                  | Cũ                           | Mới                                                     |
+| ------------------------- | ----------------------------- | -------------------------------------------------------- |
+| `valid_rate`            | 1.00                          | 0.85                                                     |
+| `facing_ok_rate`        | 0.52                          | 0.94 (các object còn lại nhìn ngang hông, cos ≈ 0) |
+| `ground_supported_rate` | 0.35                          | 1.00                                                     |
+| `density_ratio_median`  | 4.39 (dày gấp 4 lần thật) | 1.32                                                     |
+
+`valid_rate` giảm vì luật chặt hơn: vị trí sai vật lý bị loại thay vì được chấp nhận.
+
+### Bước 5 — Thống kê thiếu hụt của dataset (pain point)
+
+```powershell
+python tools/dataset_gap.py                            # v1.0-mini -> output\dataset_gap_v1.0-mini.json
+python tools/dataset_gap.py --version v1.0-trainval    # chỉ cần gói metadata của trainval
+```
+
+Đếm tỉ lệ lớp, xe 2 bánh (đang chạy / đỗ), bầy xe 2 bánh gần ego, khoảng cách tới xe đang chạy gần nhất, các proxy tình huống nguy hiểm (cắt đầu, ngược chiều, đi bộ giữa đường) và số scene mưa / đêm. Proxy chỉ dựa trên vị trí + hướng box ở 1 khung, xem docstring để biết giới hạn.
+
 - `weather/<weather>_<level>`: `point_count_change` (mean_ratio, mean_diff), `intensity_stats` trước/sau.
 
 ---
@@ -233,29 +269,39 @@ Chạy cùng dữ liệu, cùng seed thì các con số (trừ thời gian chạ
 
 Tổng **4111 template**, 14 category:
 
-| Category | Số template | Category | Số template |
-|---|---|---|---|
-| vehicle.car | 2117 | vehicle.construction | 110 |
-| human.pedestrian.adult | 582 | vehicle.motorcycle | 90 |
-| movable_object.barrier | 579 | vehicle.trailer | 47 |
-| vehicle.truck | 302 | movable_object.trafficcone | 37 |
-| vehicle.bus.rigid | 167 | vehicle.bus.bendy | 31 |
-| human.pedestrian.personal_mobility | 20 | human.pedestrian.construction_worker | 17 |
-| vehicle.bicycle | 7 | movable_object.pushable_pullable | 5 |
+| Category                           | Số template | Category                             | Số template |
+| ---------------------------------- | ------------ | ------------------------------------ | ------------ |
+| vehicle.car                        | 2117         | vehicle.construction                 | 110          |
+| human.pedestrian.adult             | 582          | vehicle.motorcycle                   | 90           |
+| movable_object.barrier             | 579          | vehicle.trailer                      | 47           |
+| vehicle.truck                      | 302          | movable_object.trafficcone           | 37           |
+| vehicle.bus.rigid                  | 167          | vehicle.bus.bendy                    | 31           |
+| human.pedestrian.personal_mobility | 20           | human.pedestrian.construction_worker | 17           |
+| vehicle.bicycle                    | 7            | movable_object.pushable_pullable     | 5            |
 
 ### 4.2. Task A — chèn object
 
-Mẫu: [docs/ket_qua_mau/023c4df2d451409881d8e6ea82f14704.json](docs/ket_qua_mau/023c4df2d451409881d8e6ea82f14704.json) (target `023c4df2...`, chèn 2/2 object, khoảng 2.4 s).
+Số liệu và ảnh mẫu trong mục này tạo bằng pipeline hiện tại (có luật vật lý), seed 42.
 
-Kết quả đánh giá insertion (6 scene):
+Mẫu: [docs/ket_qua_mau/023c4df2d451409881d8e6ea82f14704.json](docs/ket_qua_mau/023c4df2d451409881d8e6ea82f14704.json) (target `023c4df2...`, chèn 2/2 object, khoảng 2.4 s):
 
-| Chỉ số | Giá trị |
-|---|---|
-| `valid_rate` | 1.0 (mọi object yêu cầu đều chèn được) |
-| `total_objects` | 10 (vehicle.truck 6, vehicle.car 4) |
-| `scenes_per_hour` | khoảng 1580 (phụ thuộc máy) |
+- `vehicle.truck` tại (3.0, -15.3): 474 điểm, r 15.9 → 15.6 m, `facing_cos` +0.99.
+- `vehicle.car` tại (7.9, 27.5): 27 / 41 điểm còn thấy (dời ra xa r 21.6 → 28.7 m nên bị subsample), `facing_cos` +0.98.
 
-Ảnh BEV: object chèn vào phải nằm trên vùng đường, không chồng lên box có sẵn, chân chạm mặt đất.
+Kết quả đánh giá insertion (6 scene, `python evaluate.py --run-insertion 6`):
+
+| Chỉ số                  | Giá trị                                           |
+| ------------------------- | --------------------------------------------------- |
+| `valid_rate`            | 0.89 (8/9 object chèn được)                     |
+| `total_objects`         | 8 (vehicle.truck 6, vehicle.car 2)                  |
+| `scenes_per_hour`       | khoảng 1670 (phụ thuộc máy)                     |
+| `reject_stats`          | `off_area` 135, `no_ground` 16, `collision` 7 |
+| `facing_ok_rate`        | 1.00                                                |
+| `ground_supported_rate` | 1.00                                                |
+| `density_ratio_median`  | 0.98                                                |
+| `visible_ratio_mean`    | 0.84                                                |
+
+Ảnh BEV: object chèn vào phải nằm trên vùng đường, không chồng lên box có sẵn, chân chạm mặt đất, điểm nằm ở mặt quay về sensor.
 
 ![Task A](docs/ket_qua_mau/insertion_023c4df2d451409881d8e6ea82f14704.png)
 
@@ -264,13 +310,13 @@ Kết quả đánh giá insertion (6 scene):
 Sample `ca9a282c...` (sample[0]), point cloud gốc khoảng 34 700 điểm, intensity trung bình 19.85.
 
 | Weather / level | Tỉ lệ điểm còn lại | Số điểm thay đổi | Intensity TB sau |
-|---|---|---|---|
-| rain light | 0.932 | -2 359 | 17.36 |
-| rain moderate | 0.871 | -4 466 | 15.21 |
-| rain heavy | 0.820 | -6 247 | 12.48 |
-| fog light | 0.950 | -1 749 | 18.79 |
-| fog moderate | 0.842 | -5 471 | 16.90 |
-| fog dense | 0.707 | -10 154 | 14.87 |
+| --------------- | ------------------------ | --------------------- | ---------------- |
+| rain light      | 0.932                    | -2 359                | 17.36            |
+| rain moderate   | 0.871                    | -4 466                | 15.21            |
+| rain heavy      | 0.820                    | -6 247                | 12.48            |
+| fog light       | 0.950                    | -1 749                | 18.79            |
+| fog moderate    | 0.842                    | -5 471                | 16.90            |
+| fog dense       | 0.707                    | -10 154               | 14.87            |
 
 Cách đọc: level càng nặng thì càng mất nhiều điểm và intensity càng giảm. Kết quả sai nếu không theo xu hướng này.
 
@@ -306,13 +352,15 @@ pytest tests/
 python tests/test_utils.py          # chạy riêng từng file, không cần pytest
 python tests/test_ground_plane.py
 python tests/test_extract_object.py
+python tests/test_merge_placement.py
 ```
 
-| File | Kiểm tra |
-|---|---|
-| `test_utils.py` | loader, transforms khớp nuScenes devkit; vẽ BEV |
-| `test_ground_plane.py` | RANSAC trên dữ liệu tổng hợp, GroundModel theo dốc, sai số với đáy box thật, map area |
-| `test_extract_object.py` | template nằm trong box, roundtrip local frame, ground margin, save/load, build bank |
+| File                        | Kiểm tra                                                                                                                                                                                                                       |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `test_utils.py`           | loader, transforms khớp nuScenes devkit; vẽ BEV                                                                                                                                                                               |
+| `test_ground_plane.py`    | RANSAC trên dữ liệu tổng hợp, GroundModel theo dốc, sai số với đáy box thật, map area                                                                                                                                |
+| `test_extract_object.py`  | template nằm trong box, roundtrip local frame, ground margin, save/load, build bank                                                                                                                                            |
+| `test_merge_placement.py` | gán ring khớp LiDAR thật, che khuất 2 chiều, subsample theo khoảng cách, xoá điểm trong box, placement giữ r + view_angle, loại vị trí không thấy đất / có vật cản, chèn trên data thật đúng vật lý |
 
 Trước khi push code, chạy `pytest tests/` và đảm bảo không có test fail.
 
@@ -320,18 +368,18 @@ Trước khi push code, chạy `pytest tests/` và đảm bảo không có test 
 
 ## 7. Cấu hình (`n3-08c\config.py`)
 
-| Nhóm | Biến | Ghi chú |
-|---|---|---|
-| Đường dẫn | `PROJECT_ROOT` | tự tính = thư mục cha của `n3-08c\` |
-| Dataset | `DATAROOT`, `VERSION`, `LIDAR_CHANNEL` | `DATAROOT` mặc định `<repo>\datasets\nuscenes`, override bằng `NUSCENES_DATAROOT` |
-| Output | `OUTPUT_DIR`, `TEMPLATE_DIR`, `AUGMENTED_DIR`, `WEATHER_DIR`, `VIS_DIR` | `OUTPUT_DIR` mặc định `<repo>\output`, override bằng `N308C_OUTPUT_DIR` |
-| Chung | `SEED = 42` | đổi seed thì kết quả mục 4 sẽ khác |
-| Task A | `MIN_DISTANCE`, `MAX_DISTANCE` | khoảng cách đặt object (m) |
-| | `COLLISION_IOU_THRESH` | BEV IoU > ngưỡng = va chạm |
-| | `MIN_TEMPLATE_POINTS`, `TEMPLATE_GROUND_MARGIN`, `TEMPLATE_CATEGORIES` | lọc template |
-| | `GROUND` | tham số RANSAC + GroundModel |
-| | `PLACEMENT_LAYERS`, `DEFAULT_LAYERS` | map layer hợp lệ theo category |
-| Task B | `RAIN_LEVELS`, `FOG_VISIBILITY` | thêm level mới ở đây |
+| Nhóm         | Biến                                                                             | Ghi chú                                                                                    |
+| ------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Đường dẫn | `PROJECT_ROOT`                                                                  | tự tính = thư mục cha của`n3-08c\`                                                   |
+| Dataset       | `DATAROOT`, `VERSION`, `LIDAR_CHANNEL`                                      | `DATAROOT` mặc định `<repo>\datasets\nuscenes`, override bằng `NUSCENES_DATAROOT` |
+| Output        | `OUTPUT_DIR`, `TEMPLATE_DIR`, `AUGMENTED_DIR`, `WEATHER_DIR`, `VIS_DIR` | `OUTPUT_DIR` mặc định `<repo>\output`, override bằng `N308C_OUTPUT_DIR`           |
+| Chung         | `SEED = 42`                                                                     | đổi seed thì kết quả mục 4 sẽ khác                                                  |
+| Task A        | `MIN_DISTANCE`, `MAX_DISTANCE`                                                | khoảng cách đặt object (m)                                                              |
+|               | `COLLISION_IOU_THRESH`                                                          | BEV IoU > ngưỡng = va chạm                                                               |
+|               | `MIN_TEMPLATE_POINTS`, `TEMPLATE_GROUND_MARGIN`, `TEMPLATE_CATEGORIES`      | lọc template                                                                               |
+|               | `GROUND`                                                                        | tham số RANSAC + GroundModel                                                               |
+|               | `PLACEMENT_LAYERS`, `DEFAULT_LAYERS`                                          | map layer hợp lệ theo category                                                            |
+| Task B        | `RAIN_LEVELS`, `FOG_VISIBILITY`                                               | thêm level mới ở đây                                                                   |
 
 ### Quy ước dữ liệu
 
@@ -344,16 +392,17 @@ Trước khi push code, chạy `pytest tests/` và đảm bảo không có test 
 
 ## 8. Lỗi thường gặp
 
-| Lỗi | Cách xử lý |
-|---|---|
-| `Không thấy v1.0-mini/sample.json trong ...` | Dữ liệu chưa đúng chỗ. Kiểm tra cấu trúc mục 2.3, hoặc đặt `NUSCENES_DATAROOT`. |
-| `[MISSING] ...\maps\expansion` | Chưa có map expansion, hoặc bị lồng `maps\expansion\expansion\`. Xem mục 2.3. |
-| `running scripts is disabled on this system` | `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`. |
-| `pip install` lỗi ở `open3d` hoặc `numpy` | Sai phiên bản Python. Xoá `nuscenes-env\`, tạo lại bằng `py -3.10 -m venv nuscenes-env`. |
-| `ModuleNotFoundError: No module named 'nuscenes'` (hoặc thư viện khác) | Chưa kích hoạt venv. Chạy `.\nuscenes-env\Scripts\Activate.ps1`. |
-| `ModuleNotFoundError: config` / `utils` | Chạy lệnh từ thư mục `n3-08c\`. |
-| Cửa sổ Open3D không mở / treo | Dùng `--no-vis` hoặc bỏ `--vis`; ảnh BEV vẫn lưu trong `output\vis`. |
-| `n_inserted < n_requested` | Không tìm được vị trí hợp lệ. Tăng `--n-attempts` hoặc chọn target có vùng đường rộng. |
+| Lỗi                                                                         | Cách xử lý                                                                                             |
+| ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `Không thấy v1.0-mini/sample.json trong ...`                             | Dữ liệu chưa đúng chỗ. Kiểm tra cấu trúc mục 2.3, hoặc đặt`NUSCENES_DATAROOT`.             |
+| `[MISSING] ...\maps\expansion`                                             | Chưa có map expansion, hoặc bị lồng`maps\expansion\expansion\`. Xem mục 2.3.                      |
+| `running scripts is disabled on this system`                               | `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.                                                  |
+| `pip install` lỗi ở `open3d` hoặc `numpy`                           | Sai phiên bản Python. Xoá`nuscenes-env\`, tạo lại bằng `py -3.10 -m venv nuscenes-env`.         |
+| `ModuleNotFoundError: No module named 'nuscenes'` (hoặc thư viện khác) | Chưa kích hoạt venv. Chạy`.\nuscenes-env\Scripts\Activate.ps1`.                                     |
+| `ModuleNotFoundError: config` / `utils`                                  | Chạy lệnh từ thư mục`n3-08c\`.                                                                     |
+| Cửa sổ Open3D không mở / treo                                            | Dùng`--no-vis` hoặc bỏ `--vis`; ảnh BEV vẫn lưu trong `output\vis`.                           |
+| `n_inserted < n_requested`                                                 | Không tìm được vị trí hợp lệ. Tăng`--n-attempts` hoặc chọn target có vùng đường rộng. |
+
 ---
 
 ## 9. Làm việc nhóm với Git
@@ -368,9 +417,9 @@ Trước khi push code, chạy `pytest tests/` và đảm bảo không có test 
 
 ## 10. Việc còn dở (TODO trong code)
 
-- `merge.py`: xoá điểm target nằm trong box mới; xử lý occlusion (range image).
-- `run_insertion.py`: chọn template theo category / khoảng cách phù hợp target.
+- `merge.py`: chỉnh intensity theo khoảng cách mới (hiện giữ nguyên vì r lệch ít).
+- `placement.py`: yaw theo hướng lane (kịch bản xe ngược chiều, cắt đầu — task T2).
 - `rain.py`: mô hình suy giảm vật lý `alpha = 0.01 * R^0.6`.
 - `fog.py`: hiệu chỉnh `BACKSCATTER_REF` theo dữ liệu thật.
 - `run_weather.py`: thêm tuyết, kết hợp mưa + sương.
-- `evaluate.py`: lý do reject (off_road / collision), so sánh phân bố points/box, thống kê theo dải khoảng cách.
+- `evaluate.py`: thống kê Task B theo dải khoảng cách.

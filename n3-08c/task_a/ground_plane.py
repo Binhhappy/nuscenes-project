@@ -61,7 +61,7 @@ def estimate_ground_ransac(points: np.ndarray, z_threshold: float = _G["z_thresh
     # Refine: least squares (SVD) trên inliers
     inl = cand[best_inliers]
     centroid = inl.mean(0)
-    n = np.linalg.svd(inl - centroid)[2][-1]
+    n = np.linalg.svd(inl - centroid, full_matrices=False)[2][-1]  # full_matrices=True dựng U (N x N): rất chậm
     if n[2] < 0:
         n = -n
     return float(n[0]), float(n[1]), float(n[2]), float(-n @ centroid)

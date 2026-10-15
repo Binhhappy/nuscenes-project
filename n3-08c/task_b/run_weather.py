@@ -26,17 +26,20 @@ from task_b.fog import simulate_fog  # noqa: E402
 from task_b.rain import simulate_rain  # noqa: E402
 from utils.nuscenes_loader import get_pointcloud, load_bin, load_nuscenes, save_bin  # noqa: E402
 
-LEVELS = {"rain": list(config.RAIN_LEVELS), "fog": list(config.FOG_VISIBILITY)}
+LEVELS = {"rain": list(config.RAIN_LEVELS), "fog": list(config.FOG_VISIBILITY), "storm": ["storm"]}
 
 
 def apply_weather(points: np.ndarray, weather: str, level: str,
-                  rng: Optional[np.random.Generator] = None) -> Tuple[np.ndarray, np.ndarray]:
-    """Áp weather ('rain' | 'fog') với level -> (points, labels)."""
+                  rng: Optional[np.random.Generator] = None, vehicle_boxes=()) -> Tuple[np.ndarray, np.ndarray]:
+    """Áp weather ('rain' | 'fog' | 'storm') với level -> (points, labels). vehicle_boxes: cho spray của storm."""
     if weather == "rain":
         return simulate_rain(points, level, rng, return_labels=True)
     if weather == "fog":
         return simulate_fog(points, config.FOG_VISIBILITY[level], rng, return_labels=True)
-    raise ValueError(f"weather phải là 'rain' hoặc 'fog', nhận {weather!r}")
+    if weather == "storm":
+        from task_b.storm import simulate_storm
+        return simulate_storm(points, rng, vehicle_boxes, return_labels=True)
+    raise ValueError(f"weather phải là 'rain', 'fog' hoặc 'storm', nhận {weather!r}")
     # TODO: thêm snow (nhiễu dày gần sensor + dropout), kết hợp rain + fog.
 
 
@@ -57,7 +60,7 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--sample", help="sample token (mặc định sample[0])")
     ap.add_argument("--input", help="file .bin (vd output của Task A) thay cho --sample")
-    ap.add_argument("--weather", choices=["rain", "fog"], default="rain")
+    ap.add_argument("--weather", choices=["rain", "fog", "storm"], default="rain")
     ap.add_argument("--level", default="moderate", help="rain: light/moderate/heavy; fog: light/moderate/dense")
     ap.add_argument("--all-levels", action="store_true")
     ap.add_argument("--seed", type=int, default=config.SEED)

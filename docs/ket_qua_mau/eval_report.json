@@ -1,12 +1,25 @@
 {
   "insertion": {
     "n_scenes": 6,
-    "valid_rate": 1.0,
-    "total_objects": 10,
-    "scenes_per_hour": 1582.7244106457017,
+    "valid_rate": 0.8888888888888888,
+    "total_objects": 8,
+    "scenes_per_hour": 1666.9509358228015,
     "per_category": {
       "vehicle.truck": 6,
-      "vehicle.car": 4
+      "vehicle.car": 2
+    },
+    "reject_stats": {
+      "off_area": 135,
+      "collision": 7,
+      "no_ground": 16
+    },
+    "quality": {
+      "n_objects": 8,
+      "facing_ok_rate": 1.0,
+      "ground_supported_rate": 1.0,
+      "density_ratio_median": 0.9786164128269391,
+      "density_ratio_n": 8,
+      "visible_ratio_mean": 0.8384050474165059
     }
   },
   "weather/fog_dense": {

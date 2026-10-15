@@ -1,0 +1,8 @@
+nuscenes-env/
+datasets/
+output/
+webapp/temp_outputs/
+docs/demo/assets/
+**/__pycache__/
+**/*.pyc
+.git/

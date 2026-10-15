@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>N3-08C Edge case LiDAR VN</title>
+<style>
+:root{--bg:#f6f5f2;--card:#fff;--ink:#141413;--ink2:#55534e;--line:#e3e1db;--accent:#2a78d6;--ok:#1a9e3a;--bad:#d62728;--conf:#ff8c00;--obj:#6250d6}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{padding:20px 24px 8px;max-width:1280px;margin:auto}h1{font-size:22px;margin:0 0 4px}header p{margin:0;color:var(--ink2)}
+nav{position:sticky;top:0;background:var(--bg);border-bottom:1px solid var(--line);z-index:5}
+nav div{max-width:1280px;margin:auto;padding:0 16px;display:flex;gap:4px;overflow-x:auto}
+nav button{border:0;background:none;padding:12px 14px;font:inherit;color:var(--ink2);cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap}
+nav button.on{color:var(--ink);border-color:var(--accent);font-weight:600}
+main{max-width:1280px;margin:auto;padding:16px}section{display:none}section.on{display:block}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:16px}
+h2{font-size:18px;margin:0 0 10px}h3{font-size:15px;margin:14px 0 6px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px}
+.stat b{display:block;font-size:26px;line-height:1.2}.stat span{color:var(--ink2);font-size:13px}
+.steps{counter-reset:s;list-style:none;padding:0;margin:0}.steps li{counter-increment:s;padding:6px 0 6px 34px;position:relative}
+.steps li:before{content:counter(s);position:absolute;left:0;top:6px;width:24px;height:24px;border-radius:50%;background:var(--accent);color:#fff;text-align:center;font-size:13px;line-height:24px}
+img.full{width:100%;height:auto;border:1px solid var(--line);border-radius:8px;background:#fff}
+.viewer{display:grid;grid-template-columns:260px 1fr;gap:16px}@media(max-width:820px){.viewer{grid-template-columns:1fr}}
+.list button{display:block;width:100%;text-align:left;border:1px solid var(--line);background:var(--card);border-radius:8px;padding:8px 10px;margin-bottom:6px;font:inherit;cursor:pointer}
+.list button.on{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}.list small{color:var(--ink2);display:block}
+.list h4{margin:12px 0 6px;font-size:13px;color:var(--ink2);text-transform:uppercase;letter-spacing:.04em}
+.stage{position:relative;height:560px;background:#fff;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.stage canvas{display:block}.stage img{width:100%;height:100%;object-fit:contain}
+.ws-top{display:grid;grid-template-columns:1.7fr 1fr;gap:10px}.ws .stage{height:470px}
+.bev{margin:0;background:#fff;border:1px solid var(--line);border-radius:10px;overflow:hidden;cursor:zoom-in;height:470px;display:flex;flex-direction:column}
+.bev img{width:100%;flex:1;min-height:0;object-fit:contain}.bev figcaption{padding:4px 8px;font-size:12px;color:var(--ink2);border-top:1px solid var(--line)}
+.cams{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
+.cam{margin:0;position:relative;border:2px solid var(--line);border-radius:8px;overflow:hidden;cursor:zoom-in;background:#000}
+.cam.hit{border-color:var(--obj)}.cam img{width:100%;display:block;aspect-ratio:16/9;object-fit:cover}
+.cam figcaption{position:absolute;left:0;top:0;background:#000a;color:#fff;font-size:12px;padding:2px 8px;border-bottom-right-radius:6px}
+.cam .badge{position:absolute;right:6px;top:4px;background:var(--obj);color:#fff;font-size:12px;border-radius:10px;padding:1px 8px}
+#lightbox{position:fixed;inset:0;background:#000d;display:none;align-items:center;justify-content:center;z-index:20;cursor:zoom-out}
+#lightbox img{max-width:96vw;max-height:92vh;border-radius:6px}
+@media(max-width:820px){.ws-top{grid-template-columns:1fr}.cams{grid-template-columns:repeat(2,1fr)}.ws .stage,.bev{height:360px}}
+.tabs{display:flex;gap:6px;margin-bottom:8px}.tabs button{border:1px solid var(--line);background:var(--card);border-radius:6px;padding:6px 12px;cursor:pointer;font:inherit}
+.tabs button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:13px;color:var(--ink2);margin-top:8px}
+.legend i{display:inline-block;width:14px;height:3px;vertical-align:middle;margin-right:6px}
+.info{margin-top:8px;font-size:14px}.info b{font-size:16px}
+table{border-collapse:collapse;width:100%;font-size:14px}th,td{border-bottom:1px solid var(--line);padding:6px 8px;text-align:right}th:first-child,td:first-child{text-align:left}
+th{color:var(--ink2);font-weight:600}
+.vids{display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:16px}video{width:100%;border-radius:8px;border:1px solid var(--line);background:#000}
+.charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:16px}
+.note{color:var(--ink2);font-size:13px}.hint{position:absolute;right:10px;bottom:8px;font-size:12px;color:var(--ink2);background:#fffc;padding:2px 6px;border-radius:4px}
+</style></head><body>
+<header><h1>N3-08C — Sinh edge case LiDAR cho giao thông Việt Nam</h1>
+<p>Chèn vật thể / kịch bản / thời tiết VN vào point cloud thật của nuScenes, theo đúng vật lý LiDAR, rồi đo detector pretrained (CenterPoint-PointPillar) trên mini_val. · <a href="slides.html">Slide thuyết trình</a></p></header>
+<nav><div id="nav"></div></nav>
+<main>
+<section id="s-overview">
+ <div class="stats" id="stats"></div>
+ <div class="card" style="margin-top:16px"><h2>Giải pháp</h2><ol class="steps">
+  <li><b>Cảnh nền thật</b>: khung LiDAR nuScenes + 9 lần quét trước (như model đọc).</li>
+  <li><b>Vật thể</b>: cắt mẫu object thật (xe máy, ô tô, người) hoặc dựng hình theo kích thước công bố rồi <b>bắn đúng 32 tia</b> của Velodyne HDL-32E (xe máy chở 2-3 người / chở hàng, ba gác, xe hàng rong, chó, bò...).</li>
+  <li><b>Kịch bản VN</b>: luật vị trí / hướng / tốc độ theo xe ego (bầy xe máy, cắt đầu, ngược chiều, phố chợ...), nhiều khung liên tục.</li>
+  <li><b>Ghép theo vật lý</b>: mật độ theo khoảng cách, chỉ mặt nhìn thấy, che khuất 2 chiều, mặt đất cục bộ, đủ 10 sweep.</li>
+  <li><b>Thời tiết</b>: mưa, sương, giông bão (mưa rất to + mặt đường ướt + bụi nước sau bánh xe).</li>
+  <li><b>Đo có đối chứng</b>: cùng vật thể, cùng cách chèn, chỉ khác tình huống → khác biệt là do tình huống.</li></ol></div>
+ <div class="card"><h2>Vật thể chèn trông thế nào</h2><p class="note">Điểm LiDAR của vật thể (cam) trong cảnh (xám), cạnh xe máy / ô tô thật của nuScenes.</p><img class="full" src="assets/report/vn_closeup.png" alt="cận cảnh điểm LiDAR"></div>
+</section>
+<section id="s-cases"><div class="viewer"><div class="list" id="caseList"></div><div id="caseWS"></div></div></section>
+<section id="s-weather"><div class="card"><h2>Cùng 1 khung bầy xe máy dưới các điều kiện thời tiết</h2>
+ <div class="tabs" id="wtabs"></div><div id="wWS"></div></div>
+ <div class="card"><h2>Recall theo thời tiết (41 khung mini_val)</h2><div id="wtable"></div></div>
+ <div class="card"><h2>4 điều kiện cạnh nhau (LiDAR nhìn từ trên)</h2><img class="full" src="assets/cases/weather_swarm.png" alt="thời tiết"></div></section>
+<div id="lightbox"><img alt=""></div>
+<section id="s-videos"><div class="vids" id="vids"></div></section>
+<section id="s-charts"><div class="charts" id="charts"></div></section>
+<section id="s-limits"><div class="card"><h2>Hạn chế</h2><ul>
+ <li>Dữ liệu nhỏ: nuScenes mini, 6 xe máy có người lái để cắt mẫu, mini_val 2 scene.</li>
+ <li>Xe máy dựng hình + ray-cast chưa được detector nhận như xe máy thật (64% vs 94%): kịch bản xe máy ray-cast chỉ so với đối chứng ray-cast. Ô tô ray-cast đạt (93% vs 93%).</li>
+ <li>Kích thước vật thể ray-cast, tham số thời tiết là giả định có cơ sở, chưa hiệu chỉnh bằng đo thật ở VN.</li>
+ <li>Bản đồ nền Singapore / Boston (đô thị): xe bò, trâu bò là vật cản bất thường, không phải bối cảnh nông thôn.</li>
+ <li>"Thấy vật cản" (box bất kỳ tại chỗ) là thước đo dễ dãi với vật thể không có lớp nuScenes.</li>
+ <li>Fine-tune (T7) chưa thành công: model kém đi trên dữ liệu thật; là hướng phát triển tiếp.</li></ul></div></section>
+</main>
+<script src="lib/three.min.js"></script><script src="lib/OrbitControls.js"></script>
+<script>
+const D = {"cases": {"control_2w": {"label": "Đối chứng: xe máy đi cùng chiều", "group": "t6", "recall_all": 0.9310344827586207, "n_all": 464, "frame": "khung này: đúng 3/3, nhầm lớp 0, sót 0", "cams": {"CAM_FRONT": 2, "CAM_FRONT_LEFT": 0, "CAM_FRONT_RIGHT": 0, "CAM_BACK": 1, "CAM_BACK_LEFT": 0, "CAM_BACK_RIGHT": 0}}, "moto_swarm": {"label": "Bầy 10-20 xe máy quanh xe", "group": "t6", "recall_all": 0.8122436099715998, "n_all": 3169, "frame": "khung này: đúng 10/20, nhầm lớp 10, sót 0", "cams": {"CAM_FRONT": 9, "CAM_FRONT_LEFT": 8, "CAM_FRONT_RIGHT": 0, "CAM_BACK": 7, "CAM_BACK_LEFT": 4, "CAM_BACK_RIGHT": 0}}, "cut_in": {"label": "Xe máy cắt đầu 3-8 m", "group": "t6", "recall_all": 1.0, "n_all": 243, "frame": "khung này: đúng 1/1, nhầm lớp 0, sót 0", "cams": {"CAM_FRONT": 1, "CAM_FRONT_LEFT": 1, "CAM_FRONT_RIGHT": 0, "CAM_BACK": 0, "CAM_BACK_LEFT": 0, "CAM_BACK_RIGHT": 0}}, "wrong_way": {"label": "Xe ngược chiều trong làn", "group": "t6", "recall_all": 0.9835390946502057, "n_all": 243, "frame": "khung này: đúng 1/1, nhầm lớp 0, sót 0", "cams": {"CAM_FRONT": 1, "CAM_FRONT_LEFT": 0, "CAM_FRONT_RIGHT": 0, "CAM_BACK": 0, "CAM_BACK_LEFT": 0, "CAM_BACK_RIGHT": 0}}, "jaywalk": {"label": "Người băng ngang ngoài vạch", "group": "t6", "recall_all": 0.9958847736625515, "n_all": 243, "frame": "khung này: đúng 1/1, nhầm lớp 0, sót 0", "cams": {"CAM_FRONT": 1, "CAM_FRONT_LEFT": 0, "CAM_FRONT_RIGHT": 0, "CAM_BACK": 0, "CAM_BACK_LEFT": 0, "CAM_BACK_RIGHT": 0}}, "lane_block": {"label": "Ô tô / xe tải đỗ lấn làn", "group": "t6", "recall_all": 0.9506172839506173, "n_all": 243, "frame": "khung này: đúng 1/1, nhầm lớp 0, sót 0", "cams": {"CAM_FRONT": 1, "CAM_FRONT_LEFT": 0, "CAM_FRONT_RIGHT": 0, "CAM_BACK": 0, "CAM_BACK_LEFT": 0, "CAM_BACK_RIGHT": 0}}, "rc_control_moto": {"label": "Đối chứng: xe máy ray-cast", "group": "vn", "recall_all": 0.6384364820846905, "n_all": 307, "frame": "khung này: đúng 2/3, nhầm lớp 1, sót 0", "cams": {"CAM_FRONT": 2, "CAM_FRONT_LEFT": 0, "CAM_FRONT_RIGHT": 0, "CAM_BACK": 1, "CAM_BACK_LEFT": 0, "CAM_BACK_RIGHT": 0}}, "multi_rider": {"label": "Xe máy chở 2-3 người", "group": "vn", "recall_all": 0.5993690851735016, "n_all": 317, "frame": "khung này: đúng 1/3, nhầm lớp 2, sót 0", "cams": {"CAM_FRONT": 1, "CAM_FRONT_LEFT": 0, "CAM_FRONT_RIGHT": 0, "CAM_BACK": 2, "CAM_BACK_LEFT": 0, "CAM_BACK_RIGHT": 0}}, "cargo_moto": {"label": "Xe máy chở hàng cồng kềnh", "group": "vn", "recall_all": 0.29098360655737704, "n_all": 244, "frame": "khung này: đúng 1/2, nhầm lớp 0, sót 1", "cams": {"CAM_FRONT": 2, "CAM_FRONT_LEFT": 0, "CAM_FRONT_RIGHT": 0, "CAM_BACK": 0, "CAM_BACK_LEFT": 0, "CAM_BACK_RIGHT": 0}}, "ba_gac_slow": {"label": "Xe ba gác chạy chậm sát lề", "group": "vn", "recall_all": 0.9567901234567902, "n_all": 162, "frame": "khung này: đúng 1/1, nhầm lớp 0, sót 0", "cams": {"CAM_FRONT": 1, "CAM_FRONT_LEFT": 0, "CAM_FRONT_RIGHT": 0, "CAM_BACK": 0, "CAM_BACK_LEFT": 0, "CAM_BACK_RIGHT": 0}}, "tow_moto": {"label": "Xe máy kéo thùng hàng", "group": "vn", "recall_all": 0.9259259259259259, "n_all": 162, "frame": "khung này: đúng 0/1, nhầm lớp 0, sót 1", "cams": {"CAM_FRONT": 1, "CAM_FRONT_LEFT": 0, "CAM_FRONT_RIGHT": 0, "CAM_BACK": 0, "CAM_BACK_LEFT": 0, "CAM_BACK_RIGHT": 0}}, "vendor_curb": {"label": "Xe hàng rong lấn lòng đường", "group": "vn", "recall_all": 0.9529411764705882, "n_all": 255, "frame": "khung này: đúng 2/2, nhầm lớp 0, sót 0", "cams": {"CAM_FRONT": 2, "CAM_FRONT_LEFT": 0, "CAM_FRONT_RIGHT": 0, "CAM_BACK": 0, "CAM_BACK_LEFT": 0, "CAM_BACK_RIGHT": 0}}, "dog_dart": {"label": "Chó lao ngang trước xe", "group": "vn", "recall_all": 0.9382716049382716, "n_all": 162, "frame": "khung này: đúng 1/1, nhầm lớp 0, sót 0", "cams": {"CAM_FRONT": 1, "CAM_FRONT_LEFT": 0, "CAM_FRONT_RIGHT": 0, "CAM_BACK": 0, "CAM_BACK_LEFT": 0, "CAM_BACK_RIGHT": 0}}, "cow_road": {"label": "Trâu / bò trên lòng đường", "group": "vn", "recall_all": 0.9753086419753086, "n_all": 162, "frame": "khung này: đúng 1/1, nhầm lớp 0, sót 0", "cams": {"CAM_FRONT": 1, "CAM_FRONT_LEFT": 0, "CAM_FRONT_RIGHT": 0, "CAM_BACK": 0, "CAM_BACK_LEFT": 0, "CAM_BACK_RIGHT": 0}}, "ox_cart_road": {"label": "Xe bò đi chậm trong làn", "group": "vn", "recall_all": 0.7305194805194806, "n_all": 308, "frame": "khung này: đúng 1/1, nhầm lớp 0, sót 0", "cams": {"CAM_FRONT": 1, "CAM_FRONT_LEFT": 0, "CAM_FRONT_RIGHT": 0, "CAM_BACK": 0, "CAM_BACK_LEFT": 0, "CAM_BACK_RIGHT": 0}}, "rush_hour": {"label": "Giờ cao điểm (mix)", "group": "vn", "recall_all": 0.7649769585253456, "n_all": 2170, "frame": "khung này: đúng 13/17, nhầm lớp 1, sót 3", "cams": {"CAM_FRONT": 5, "CAM_FRONT_LEFT": 3, "CAM_FRONT_RIGHT": 2, "CAM_BACK": 5, "CAM_BACK_LEFT": 4, "CAM_BACK_RIGHT": 4}}, "market_street": {"label": "Phố chợ (mix)", "group": "vn", "recall_all": 0.9810040705563093, "n_all": 737, "frame": "khung này: đúng 6/6, nhầm lớp 0, sót 0", "cams": {"CAM_FRONT": 5, "CAM_FRONT_LEFT": 2, "CAM_FRONT_RIGHT": 2, "CAM_BACK": 0, "CAM_BACK_LEFT": 0, "CAM_BACK_RIGHT": 0}}, "animal_in_traffic": {"label": "Chó lao ra giữa bầy xe (mix)", "group": "vn", "recall_all": 0.8411528150134048, "n_all": 1492, "frame": "khung này: đúng 9/11, nhầm lớp 2, sót 0", "cams": {"CAM_FRONT": 8, "CAM_FRONT_LEFT": 2, "CAM_FRONT_RIGHT": 0, "CAM_BACK": 3, "CAM_BACK_LEFT": 0, "CAM_BACK_RIGHT": 0}}, "ped_group_cross": {"label": "Nhóm 3-8 người băng ngang", "group": "vn", "recall_all": 0.9916067146282974, "n_all": 834, "frame": "khung này: đúng 8/8, nhầm lớp 0, sót 0", "cams": {"CAM_FRONT": 8, "CAM_FRONT_LEFT": 0, "CAM_FRONT_RIGHT": 0, "CAM_BACK": 0, "CAM_BACK_LEFT": 0, "CAM_BACK_RIGHT": 0}}, "ped_crowd": {"label": "Đám đông 10-20 người dưới lòng đường", "group": "vn", "recall_all": 0.9932260795935648, "n_all": 2362, "frame": "khung này: đúng 19/20, nhầm lớp 0, sót 1", "cams": {"CAM_FRONT": 13, "CAM_FRONT_LEFT": 9, "CAM_FRONT_RIGHT": 0, "CAM_BACK": 1, "CAM_BACK_LEFT": 5, "CAM_BACK_RIGHT": 0}}, "weather_clear": {"label": "Trời trong", "group": "weather", "frame": "khung này: đúng 10/20, nhầm lớp 10, sót 0", "cams": {"CAM_FRONT": 9, "CAM_FRONT_LEFT": 8, "CAM_FRONT_RIGHT": 0, "CAM_BACK": 7, "CAM_BACK_LEFT": 4, "CAM_BACK_RIGHT": 0}}, "weather_rain_heavy": {"label": "Mưa to", "group": "weather", "frame": "khung này: đúng 9/20, nhầm lớp 5, sót 6", "cams": {"CAM_FRONT": 9, "CAM_FRONT_LEFT": 8, "CAM_FRONT_RIGHT": 0, "CAM_BACK": 7, "CAM_BACK_LEFT": 4, "CAM_BACK_RIGHT": 0}}, "weather_fog_dense": {"label": "Sương dày", "group": "weather", "frame": "khung này: đúng 10/20, nhầm lớp 9, sót 1", "cams": {"CAM_FRONT": 9, "CAM_FRONT_LEFT": 8, "CAM_FRONT_RIGHT": 0, "CAM_BACK": 7, "CAM_BACK_LEFT": 4, "CAM_BACK_RIGHT": 0}}, "weather_storm": {"label": "Giông / bão", "group": "weather", "frame": "khung này: đúng 7/20, nhầm lớp 6, sót 7", "cams": {"CAM_FRONT": 9, "CAM_FRONT_LEFT": 8, "CAM_FRONT_RIGHT": 0, "CAM_BACK": 7, "CAM_BACK_LEFT": 4, "CAM_BACK_RIGHT": 0}}}, "summary": {"t6_motorcycle": [{"recall": 0.5535714285714286, "ci95": [0.4520398324245245, 0.6443598939414839], "n_objects": 224, "n_frames": 47, "label": "Xe máy thật (nuScenes)", "group": "real"}, {"recall": 0.9314420803782506, "ci95": [0.905471754701669, 0.9555568535825546], "n_objects": 423, "n_frames": 233, "label": "Đối chứng: chèn, đi cùng chiều", "group": "control_2w"}, {"recall": 0.8102112676056338, "ci95": [0.7944707427180769, 0.82505487294947], "n_objects": 2840, "n_frames": 243, "label": "Bầy 10-20 xe máy", "group": "moto_swarm"}, {"recall": 1.0, "ci95": [1.0, 1.0], "n_objects": 243, "n_frames": 243, "label": "Xe máy cắt đầu", "group": "cut_in"}], "t6_swarm_minus_control": {"diff": -0.12123081277261682, "ci95": [-0.14757152794813164, -0.09080772590179198]}, "t6_recall_by_points": {"bins": ["1-19 điểm", "20-49", "50-99", "≥100"], "control_2w": [0.8556701030927835, 0.9363636363636364, 0.9838709677419355, 1.0], "moto_swarm": [0.4225352112676056, 0.78702807357212, 0.9159420289855073, 0.926509186351706]}, "vn_objects": [{"recall": 0.9274924471299094, "ci95": [0.8973607038123167, 0.9562504555393586], "n_objects": 331, "n_frames": 162, "label": "Đối chứng: ô tô ray-cast", "group": "rc_control_car", "median_points": 71.0}, {"recall": 0.6384364820846905, "ci95": [0.5857605177993528, 0.6920529801324503], "n_objects": 307, "n_frames": 162, "label": "Đối chứng: xe máy ray-cast", "group": "rc_control_moto", "median_points": 23.0}, {"recall": 0.5993690851735016, "ci95": [0.5429402445915402, 0.657051282051282], "n_objects": 317, "n_frames": 162, "label": "Xe máy chở 2-3 người", "group": "multi_rider", "median_points": 29.0}, {"recall": 0.29098360655737704, "ci95": [0.23734695760096605, 0.35043682795698916], "n_objects": 244, "n_frames": 162, "label": "Xe máy chở hàng cồng kềnh", "group": "cargo_moto", "median_points": 55.5}, {"recall": 0.9567901234567902, "ci95": [0.9259259259259259, 0.9876543209876543], "n_objects": 162, "n_frames": 162, "label": "Xe ba gác", "group": "ba_gac_slow", "median_points": 60.5}, {"recall": 0.9259259259259259, "ci95": [0.8827160493827161, 0.9629629629629629], "n_objects": 162, "n_frames": 162, "label": "Xe máy kéo thùng hàng", "group": "tow_moto", "median_points": 58.0}, {"recall": 0.9529411764705882, "ci95": [0.92578125, 0.9766536964980544], "n_objects": 255, "n_frames": 162, "label": "Xe hàng rong", "group": "vendor_curb", "median_points": 46.0}, {"recall": 0.9382716049382716, "ci95": [0.9012345679012346, 0.9753086419753086], "n_objects": 162, "n_frames": 162, "label": "Chó lao ra đường", "group": "dog_dart", "median_points": 11.0}, {"recall": 0.9753086419753086, "ci95": [0.9506172839506173, 0.9938271604938271], "n_objects": 162, "n_frames": 162, "label": "Trâu / bò trên đường", "group": "cow_road", "median_points": 34.5}, {"recall": 0.7305194805194806, "ci95": [0.6898708067009233, 0.769237012987013], "n_objects": 308, "n_frames": 162, "label": "Xe bò (bò + xe)", "group": "ox_cart_road", "median_points": 24.0}, {"recall": 0.7649769585253456, "ci95": [0.7431243809719597, 0.784418525537451], "n_objects": 2170, "n_frames": 162, "label": "Giờ cao điểm (mix)", "group": "rush_hour", "median_points": 75.0}, {"recall": 0.9810040705563093, "ci95": [0.9705460445423746, 0.9905405405405405], "n_objects": 737, "n_frames": 162, "label": "Phố chợ (mix)", "group": "market_street", "median_points": 26.0}, {"recall": 0.8411528150134048, "ci95": [0.8186556738519845, 0.862050997243687], "n_objects": 1492, "n_frames": 162, "label": "Chó giữa bầy xe (mix)", "group": "animal_in_traffic", "median_points": 47.0}, {"recall": 0.9916067146282974, "ci95": [0.9817113058720421, 0.9988277356149263], "n_objects": 834, "n_frames": 157, "label": "Nhóm 3-8 người băng ngang", "group": "ped_group_cross", "median_points": 15.0}, {"recall": 0.9932260795935648, "ci95": [0.9897084048027445, 0.9962106060270575], "n_objects": 2362, "n_frames": 162, "label": "Đám đông 10-20 người", "group": "ped_crowd", "median_points": 39.0}], "pedestrians": {"recall": {"1 người (jaywalk)": {"recall": 0.9958847736625515, "ci95": [0.9876543209876543, 1.0], "n_objects": 243, "n_frames": 243}, "nhóm 3-8 người": {"recall": 0.9916067146282974, "ci95": [0.9817113058720421, 0.9988277356149263], "n_objects": 834, "n_frames": 157}, "đám đông 10-20": {"recall": 0.9932260795935648, "ci95": [0.9897084048027445, 0.9962106060270575], "n_objects": 2362, "n_frames": 162}}, "by_count": {"0-3": {"mean_recall": 0.9619047619047618, "frames": 35}, "4-7": {"mean_recall": 1.0, "frames": 102}, "8-11": {"mean_recall": 0.9891509433962263, "frames": 53}, "12-15": {"mean_recall": 0.99140625, "frames": 64}, "16+": {"mean_recall": 0.9940095525389644, "frames": 65}}}, "vn_moto_vs_rc_control": {"multi_rider": {"recall": {"recall": 0.5993690851735016, "ci95": [0.5429402445915402, 0.657051282051282], "n_objects": 317, "n_frames": 162}, "diff_vs_rc_control": {"diff": -0.03906739691118888, "ci95": [-0.11500351422892417, 0.036954898661748004]}, "obstacle_recall": 0.9810725552050473}, "cargo_moto": {"recall": {"recall": 0.29098360655737704, "ci95": [0.23734695760096605, 0.35043682795698916], "n_objects": 244, "n_frames": 162}, "diff_vs_rc_control": {"diff": -0.34745287552731347, "ci95": [-0.42396072266083445, -0.2633868463404505]}, "obstacle_recall": 0.7868852459016393}}, "weather": {"car": {"clear": 0.9259259259259259, "rain_light": 0.9058201058201059, "rain_moderate": 0.8825396825396825, "rain_heavy": 0.801058201058201, "fog_light": 0.9026455026455027, "fog_moderate": 0.8455026455026455, "fog_dense": 0.726984126984127, "storm": 0.7121693121693121}, "pedestrian": {"clear": 0.9474576271186441, "rain_light": 0.9203389830508475, "rain_moderate": 0.8135593220338984, "rain_heavy": 0.6406779661016949, "fog_light": 0.923728813559322, "fog_moderate": 0.7745762711864407, "fog_dense": 0.5135593220338983, "storm": 0.5474576271186441}, "motorcycle": {"clear": 0.5363636363636364, "rain_light": 0.5181818181818182, "rain_moderate": 0.43636363636363634, "rain_heavy": 0.38181818181818183, "fog_light": 0.5, "fog_moderate": 0.43636363636363634, "fog_dense": 0.4, "storm": 0.34545454545454546}}, "weather_swarm": {"motorcycle": {"clear": 0.795131845841785, "rain_heavy": 0.6430020283975659, "fog_dense": 0.7565922920892495, "storm": 0.5699797160243407}}}, "beams": {"dog": {"32": {"5": 67, "10": 15, "15": 9, "20": 4, "30": 3, "40": 0, "50": 0}, "64": {"5": 125, "10": 33, "15": 17, "20": 6, "30": 5, "40": 2, "50": 2}, "128": {"5": 254, "10": 63, "15": 28, "20": 14, "30": 9, "40": 2, "50": 3}}, "moto_1": {"32": {"5": 352, "10": 80, "15": 36, "20": 19, "30": 8, "40": 4, "50": 5}, "64": {"5": 713, "10": 180, "15": 74, "20": 44, "30": 17, "40": 12, "50": 6}, "128": {"5": 1433, "10": 355, "15": 155, "20": 84, "30": 39, "40": 18, "50": 15}}, "car": {"32": {"5": 1339, "10": 279, "15": 125, "20": 72, "30": 26, "40": 20, "50": 15}, "64": {"5": 2682, "10": 564, "15": 245, "20": 131, "30": 62, "40": 24, "50": 27}, "128": {"5": 5437, "10": 1166, "15": 504, "20": 278, "30": 121, "40": 66, "50": 50}}}, "weather": {"real": {"bicycle": {"clear": 53, "rain_light": 59, "rain_moderate": 41, "rain_heavy": 35, "fog_light": 47, "fog_moderate": 29, "fog_dense": 24, "storm": 29}, "bus": {"clear": 100, "rain_light": 100, "rain_moderate": 94, "rain_heavy": 82, "fog_light": 100, "fog_moderate": 100, "fog_dense": 82, "storm": 76}, "car": {"clear": 93, "rain_light": 91, "rain_moderate": 88, "rain_heavy": 80, "fog_light": 90, "fog_moderate": 85, "fog_dense": 73, "storm": 71}, "motorcycle": {"clear": 54, "rain_light": 52, "rain_moderate": 44, "rain_heavy": 38, "fog_light": 50, "fog_moderate": 44, "fog_dense": 40, "storm": 35}, "pedestrian": {"clear": 95, "rain_light": 92, "rain_moderate": 81, "rain_heavy": 64, "fog_light": 92, "fog_moderate": 77, "fog_dense": 51, "storm": 55}, "traffic_cone": {"clear": 43, "rain_light": 21, "rain_moderate": 7, "rain_heavy": 14, "fog_light": 36, "fog_moderate": 43, "fog_dense": 21, "storm": 7}, "truck": {"clear": 81, "rain_light": 81, "rain_moderate": 77, "rain_heavy": 68, "fog_light": 79, "fog_moderate": 79, "fog_dense": 57, "storm": 64}}, "swarm": {"bicycle": {"clear": 72, "rain_heavy": 66, "fog_dense": 66, "storm": 51}, "motorcycle": {"clear": 80, "rain_heavy": 64, "fog_dense": 76, "storm": 57}}}, "videos": ["scene-0103_cargo_pretrained.mp4", "scene-0103_cut_in_pretrained.mp4", "scene-0103_dog_pretrained.mp4", "scene-0103_swarm_pretrained.mp4", "scene-0103_swarm_storm.mp4"], "charts": ["lidar_beams.png", "pedestrians_recall.png", "t6_motorcycle_recall.png", "t6_swarm_by_points.png", "vn_closeup.png", "vn_objects_recall.png", "vn_scenarios_gallery.png", "weather.png", "weather_swarm.png"]};
+const COL = {ok:0x1a9e3a, missed:0xd62728, merged:0xd62728, confused:0xff8c00, pred:0x2a78d6};
+const VI = {car:"ô tô",truck:"xe tải",bicycle:"xe đạp",pedestrian:"người",barrier:"rào",motorcycle:"xe máy",traffic_cone:"cọc",bus:"xe buýt",construction_vehicle:"xe công trình",trailer:"rơ-moóc"};
+const pct = v => v==null||isNaN(v) ? "–" : Math.round(100*v)+"%";
+
+// ---- nav ----
+const SECTIONS=[["overview","Tổng quan"],["cases","Từng trường hợp"],["weather","Thời tiết"],["videos","Video"],["charts","Biểu đồ"],["limits","Hạn chế"]];
+const nav=document.getElementById("nav");
+SECTIONS.forEach(([id,label],i)=>{const b=document.createElement("button");b.textContent=label;b.onclick=()=>show(id);b.dataset.id=id;nav.appendChild(b);});
+function show(id){document.querySelectorAll("section").forEach(s=>s.classList.toggle("on",s.id==="s-"+id));
+ nav.querySelectorAll("button").forEach(b=>b.classList.toggle("on",b.dataset.id===id));
+ if(id==="cases"&&!caseWS.current)selectCase(Object.keys(D.cases).find(k=>!k.startsWith("weather")));
+ if(id==="weather"&&!wWS.current)selectWeather("weather_clear");
+ window.dispatchEvent(new Event("resize"));}
+
+// ---- tổng quan ----
+const S=D.summary, m=(S.t6_motorcycle||[]), g=k=>m.find(r=>r.group===k)||{};
+const cargo=(S.vn_moto_vs_rc_control||{}).cargo_moto, diff=S.t6_swarm_minus_control;
+const W=D.weather.real||{};
+const stats=[
+ ["0%","khung nuScenes mini có bầy ≥ 5 xe máy (tối đa 2 xe)"],
+ [pct(g("real").recall),"xe máy THẬT được detector tìm ra (ô tô 93%)"],
+ [diff?Math.round(100*diff.diff)+" điểm":"–","bầy xe máy so với đối chứng (CI 95% "+(diff?diff.ci95.map(v=>Math.round(100*v)).join(" .. "):"")+")"],
+ [cargo?Math.round(100*cargo.diff_vs_rc_control.diff)+" điểm":"–","xe máy chở hàng cồng kềnh (bị nhận thành ô tô / sót)"],
+ [(W.pedestrian||{}).clear+"% → "+(W.pedestrian||{}).storm+"%","người đi bộ: trời trong → giông bão"],
+ [((D.beams.dog||{})["32"]||{})["40"]??"0"," điểm LiDAR trên con chó ở 40 m (LiDAR 32 tia)"]];
+document.getElementById("stats").innerHTML=stats.map(([v,t])=>`<div class="stat"><b>${v}</b><span>${t}</span></div>`).join("");
+
+// ---- 3D viewer ----
+function loadData(name,cb){if(window.DEMO3D&&window.DEMO3D[name])return cb(window.DEMO3D[name]);
+ const s=document.createElement("script");s.src="data/"+name+".js";s.onload=()=>cb(window.DEMO3D[name]);document.body.appendChild(s);}
+function boxLines(b,color,dashed,faint){
+ const [w,l,h]=b.s, c=Math.cos(b.yaw), s=Math.sin(b.yaw), pts=[];
+ const cs=[[1,1],[1,-1],[-1,-1],[-1,1]].map(([a,bb])=>[b.c[0]+c*a*l/2-s*bb*w/2, b.c[1]+s*a*l/2+c*bb*w/2]);
+ const z0=b.c[2]-h/2, z1=b.c[2]+h/2;
+ for(let i=0;i<4;i++){const p=cs[i],q=cs[(i+1)%4];
+  pts.push(p[0],p[1],z0,q[0],q[1],z0, p[0],p[1],z1,q[0],q[1],z1, p[0],p[1],z0,p[0],p[1],z1);}
+ const geo=new THREE.BufferGeometry();geo.setAttribute("position",new THREE.Float32BufferAttribute(pts,3));
+ const mat=dashed?new THREE.LineDashedMaterial({color,dashSize:0.3,gapSize:0.2,transparent:true,opacity:0.7})
+  :new THREE.LineBasicMaterial({color,transparent:!!faint,opacity:faint?0.25:1});
+ const ls=new THREE.LineSegments(geo,mat); if(dashed)ls.computeLineDistances(); return ls;}
+function render3d(st,data){
+ st.stage.innerHTML="";const W0=st.stage.clientWidth,H0=st.stage.clientHeight;
+ const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setPixelRatio(window.devicePixelRatio);renderer.setSize(W0,H0);renderer.setClearColor(0xffffff);
+ st.stage.appendChild(renderer.domElement);
+ const hint=document.createElement("div");hint.className="hint";hint.textContent="kéo: xoay · chuột phải: dời · cuộn: phóng";st.stage.appendChild(hint);
+ const scene=new THREE.Scene(), cam=new THREE.PerspectiveCamera(50,W0/H0,0.1,500);cam.up.set(0,0,1);
+ const ins=data.gt.filter(b=>b.inserted); let cx=0,cy=0;
+ if(ins.length){cx=ins.reduce((a,b)=>a+b.c[0],0)/ins.length/2;cy=ins.reduce((a,b)=>a+b.c[1],0)/ins.length/2;}
+ cam.position.set(cx-6,cy-26,22);
+ const ctl=new THREE.OrbitControls(cam,renderer.domElement);ctl.target.set(cx,cy,-1);ctl.update();
+ const P=data.points,n=P.length/3,pos=new Float32Array(P),col=new Float32Array(n*3);
+ for(let i=0;i<n;i++){const o=data.obj[i];col[3*i]=o?0.38:0.55;col[3*i+1]=o?0.31:0.56;col[3*i+2]=o?0.84:0.6;}
+ const geo=new THREE.BufferGeometry();geo.setAttribute("position",new THREE.BufferAttribute(pos,3));geo.setAttribute("color",new THREE.BufferAttribute(col,3));
+ scene.add(new THREE.Points(geo,new THREE.PointsMaterial({size:0.09,vertexColors:true})));
+ const big=[];for(let i=0;i<n;i++)if(data.obj[i])big.push(P[3*i],P[3*i+1],P[3*i+2]);
+ const g2=new THREE.BufferGeometry();g2.setAttribute("position",new THREE.Float32BufferAttribute(big,3));
+ scene.add(new THREE.Points(g2,new THREE.PointsMaterial({size:0.16,color:0x6250d6})));
+ data.pred.forEach(b=>scene.add(boxLines(b,COL.pred,true)));
+ data.gt.forEach(b=>{const l=boxLines(b,COL[b.status],false,!b.inserted);scene.add(l);
+  if(b.inserted){const l2=boxLines({...b,s:[b.s[0]+0.08,b.s[1]+0.08,b.s[2]+0.08]},COL[b.status],false);scene.add(l2);}});
+ const ego=new THREE.Mesh(new THREE.ConeGeometry(0.8,1.8,3),new THREE.MeshBasicMaterial({color:0x141413}));ego.rotation.x=Math.PI/2;ego.position.set(0,0,-1.2);scene.add(ego);
+ let alive=true;st.stop=()=>{alive=false;renderer.dispose();};
+ (function loop(){if(!alive)return;renderer.render(scene,cam);requestAnimationFrame(loop);})();
+ st.onresize=()=>{const w=st.stage.clientWidth,h=st.stage.clientHeight;if(!w)return;renderer.setSize(w,h);cam.aspect=w/h;cam.updateProjectionMatrix();};}
+const LEG=`<span><i style="background:var(--ok)"></i>phát hiện đúng</span><span><i style="background:var(--bad)"></i>bỏ sót</span><span><i style="background:var(--conf)"></i>nhận nhầm lớp</span><span><i style="background:var(--accent);height:1px;border-top:2px dashed var(--accent)"></i>prediction của model (3D)</span><span><i style="background:var(--obj);height:8px;width:8px;border-radius:50%"></i>điểm LiDAR object chèn</span><span>▲ xe ego</span><span>Box đậm = object chèn · box mờ = object thật nuScenes</span><span>Ảnh camera là ảnh thật, KHÔNG có object chèn (chỉ chèn vào LiDAR): object chèn = điểm tím + box chiếu lên</span>`;
+// ---- workspace kiểu CVAT: 3D LiDAR + LiDAR nhìn từ trên + 6 camera quanh xe ----
+const CAMORDER=["CAM_FRONT_LEFT","CAM_FRONT","CAM_FRONT_RIGHT","CAM_BACK_LEFT","CAM_BACK","CAM_BACK_RIGHT"];
+const CAMVI={CAM_FRONT_LEFT:"Camera trước trái",CAM_FRONT:"Camera trước",CAM_FRONT_RIGHT:"Camera trước phải",CAM_BACK_LEFT:"Camera sau trái",CAM_BACK:"Camera sau",CAM_BACK_RIGHT:"Camera sau phải"};
+const lb=document.getElementById("lightbox");lb.onclick=()=>{lb.style.display="none";};
+function openLB(src){lb.querySelector("img").src=src;lb.style.display="flex";}
+document.addEventListener("keydown",e=>{if(e.key==="Escape")lb.style.display="none";});
+function makeWS(id,withBev){const el=document.getElementById(id);el.className="ws";
+ el.innerHTML=`<div class="ws-top"><div class="stage"></div>${withBev?'<figure class="bev"><img alt=""><figcaption>LiDAR nhìn từ trên — bấm để phóng to</figcaption></figure>':""}</div><div class="cams"></div><div class="legend">${LEG}</div><div class="info"></div>`;
+ if(!withBev)el.querySelector(".ws-top").style.gridTemplateColumns="1fr";
+ const ws={stage:el.querySelector(".stage"),bev:el.querySelector(".bev img"),cams:el.querySelector(".cams"),info:el.querySelector(".info"),current:null};
+ if(ws.bev)el.querySelector(".bev").onclick=()=>openLB(ws.bev.src);return ws;}
+function showWS(ws,k){const v=D.cases[k]||{};if(ws.stop)ws.stop();ws.onresize=null;ws.current=k;
+ ws.stage.innerHTML='<div class="hint">đang tải…</div>';loadData(k,d=>{if(ws.current===k)render3d(ws,d);});
+ if(ws.bev)ws.bev.src=`assets/cases/${v.group}_${k}.png`;
+ ws.cams.innerHTML=CAMORDER.map(c=>{const n=(v.cams||{})[c]||0,src=`assets/camtiles/${k}/${c}.jpg`;
+  return `<figure class="cam${n?" hit":""}" data-src="${src}"><img loading="lazy" src="${src}" alt="${c}"><figcaption>${CAMVI[c]}</figcaption>${n?`<span class="badge">${n} object chèn</span>`:""}</figure>`;}).join("");
+ ws.cams.querySelectorAll(".cam").forEach(f=>f.onclick=()=>openLB(f.dataset.src));}
+window.addEventListener("resize",()=>[caseWS,wWS].forEach(v=>v.onresize&&v.onresize()));
+
+// ---- từng trường hợp ----
+const caseWS=makeWS("caseWS",true);
+const list=document.getElementById("caseList");
+[["t6","Kịch bản giao thông (xe cắt mẫu thật)"],["vn","Vật thể VN (ray-cast)"]].forEach(([grp,title])=>{
+ const h=document.createElement("h4");h.textContent=title;list.appendChild(h);
+ Object.entries(D.cases).filter(([k,v])=>v.group===grp).forEach(([k,v])=>{
+  const b=document.createElement("button");b.dataset.k=k;b.innerHTML=`${v.label}<small>cả kịch bản: ${pct(v.recall_all)} (n=${v.n_all})</small>`;
+  b.onclick=()=>selectCase(k);list.appendChild(b);});});
+function selectCase(k){const v=D.cases[k];list.querySelectorAll("button").forEach(b=>b.classList.toggle("on",b.dataset.k===k));
+ showWS(caseWS,k);
+ caseWS.info.innerHTML=`<b>${v.label}</b><br>Cả kịch bản (mọi khung, 2-3 seed): phát hiện <b>${pct(v.recall_all)}</b> (n=${v.n_all}). Khung minh hoạ — ${v.frame}.<br><span class="note">Khung chọn cố định: nhiều object chèn nhất trong 20 m (không chọn theo kết quả). 3D: kéo để xoay, chuột phải để dời, cuộn để phóng; ảnh: bấm để phóng to.</span>`;}
+
+// ---- thời tiết ----
+const wWS=makeWS("wWS",false);const WT=[["weather_clear","Trời trong"],["weather_rain_heavy","Mưa to"],["weather_fog_dense","Sương dày"],["weather_storm","Giông / bão"]];
+const wt=document.getElementById("wtabs");
+WT.forEach(([k,l])=>{const b=document.createElement("button");b.textContent=l;b.dataset.k=k;b.onclick=()=>selectWeather(k);wt.appendChild(b);});
+function selectWeather(k){wt.querySelectorAll("button").forEach(b=>b.classList.toggle("on",b.dataset.k===k));showWS(wWS,k);
+ const v=D.cases[k]||{};wWS.info.innerHTML=`<b>${v.label||""}</b> — ${v.frame||""} (xe máy chèn trong khung này). Ảnh camera được phủ thời tiết tương ứng (minh hoạ, task_b/camera_weather.py); số đo là trên LiDAR; màu box đổi theo kết quả detector.`;}
+const conds=[["clear","Trời trong"],["rain_light","Mưa nhẹ"],["rain_moderate","Mưa vừa"],["rain_heavy","Mưa to"],["fog_light","Sương nhẹ"],["fog_moderate","Sương vừa"],["fog_dense","Sương dày"],["storm","Giông / bão"]];
+const rows=[["car","Ô tô",W],["pedestrian","Người đi bộ",W],["motorcycle","Xe máy (thật)",W],["motorcycle","Xe máy trong bầy",D.weather.swarm||{}]];
+document.getElementById("wtable").innerHTML="<table><tr><th></th>"+conds.map(c=>`<th>${c[1]}</th>`).join("")+"</tr>"+
+ rows.map(([cls,l,src])=>"<tr><td>"+l+"</td>"+conds.map(c=>`<td>${(src[cls]||{})[c[0]]??"–"}${(src[cls]||{})[c[0]]!=null?"%":""}</td>`).join("")+"</tr>").join("")+"</table>";
+
+// ---- video, biểu đồ ----
+const VCAP={"scene-0103_swarm_pretrained.mp4":"Bầy xe máy: nuScenes gốc (trái) / có bầy xe (phải)","scene-0103_cut_in_pretrained.mp4":"Xe máy cắt đầu","scene-0103_cargo_pretrained.mp4":"Xe máy chở hàng cồng kềnh","scene-0103_dog_pretrained.mp4":"Chó lao ngang trước xe","scene-0103_swarm_storm.mp4":"Bầy xe máy: trời trong (trái) / giông bão (phải)"};
+document.getElementById("vids").innerHTML=D.videos.map(v=>`<div class="card"><h3>${VCAP[v]||v}</h3><video src="assets/videos/${v}" controls preload="metadata" poster="assets/videos/${v.replace(".mp4",".png")}"></video></div>`).join("")+'<p class="note">Video là 1 scene minh hoạ (scene-0103, 2 khung / giây); số kết luận là thống kê toàn mini_val ở các tab khác.</p>';
+document.getElementById("charts").innerHTML=D.charts.filter(c=>c!=="vn_closeup.png").map(c=>`<div class="card"><img class="full" src="assets/report/${c}" alt="${c}"></div>`).join("");
+const h0=location.hash.slice(1);show(SECTIONS.some(s=>s[0]===h0)?h0:"overview");  // vd index.html#cases
+</script></body></html>

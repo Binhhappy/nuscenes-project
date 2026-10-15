@@ -29,6 +29,19 @@ COLLISION_IOU_THRESH: float = 0.0   # BEV IoU > ngưỡng này = va chạm
 MIN_TEMPLATE_POINTS: int = 20       # template ít điểm hơn bị bỏ
 TEMPLATE_GROUND_MARGIN: float = 0.1  # bỏ điểm trong dải này phía trên đáy box (mặt đường lẫn vào); 0 = tắt
 TEMPLATE_CATEGORIES: tuple = ("vehicle", "human.pedestrian", "movable_object")  # prefix category cho bank
+# Template phải có attribute này mới được chèn (prefix category -> attribute nuScenes).
+# Xe 2 bánh: phần lớn box trong nuScenes là xe đỗ không người lái; kịch bản giao thông cần xe đang chạy.
+TEMPLATE_REQUIRED_ATTRIBUTES: dict = {"vehicle.motorcycle": "cycle.with_rider", "vehicle.bicycle": "cycle.with_rider"}
+MAX_OBSTACLE_POINTS: int = 5        # footprint chứa nhiều điểm cao > 0.3 m hơn ngưỡng này = vật cản không nhãn
+MAX_DISTANCE_SCALE: float = 1.5    # object được dời ra xa tối đa 1.5 lần khoảng cách lúc cắt template
+MIN_VISIBLE_POINTS: int = 5         # object còn ít điểm hơn sau che khuất thì bỏ (nuScenes cũng có box 1-5 điểm)
+
+# Range image LIDAR_TOP (Velodyne HDL-32E, 20 Hz): 32 ring x ~1084 điểm mỗi vòng (bước azimuth ~0.33°)
+LIDAR_RINGS: int = 32
+LIDAR_AZIMUTH_BINS: int = 1084
+OCCLUSION_EPS: float = 0.2          # (m) điểm xa hơn điểm gần nhất cùng tia quá eps thì bị che
+OCCLUSION_NEAR_RANGE: float = 10.0  # (m) object gần hơn: che cả ring ±1 (ring ước lượng có thể lệch 1)
+N_SWEEPS: int = 10                  # keyframe + 9 sweep trước (~0.45 s), như detector nuScenes đọc
 
 # Ground model (tham số chọn theo sai số đáy box xe thật, xem task_a/ground_plane.py)
 GROUND: dict = {

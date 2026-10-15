@@ -1,0 +1,15 @@
+# Web demo N3-08C (CPU). Phiên bản ghim theo môi trường đã chạy ổn (WSL env pcdet).
+# nuscenes-devkit 1.1.11 cần matplotlib < 3.6 và kéo theo opencv-python (không cài thêm bản headless: trùng cv2).
+# Detector trực tiếp cần thêm torch + OpenPCDet + GPU (không có trong image này).
+numpy==1.26.4
+nuscenes-devkit==1.1.11
+opencv-python==4.11.0.86   # bản mới hơn đòi numpy 2 -> pip dò ngược nhiều bản 70+ MB
+matplotlib==3.5.3
+Shapely==1.8.5.post1
+scipy==1.15.3
+pyquaternion==0.9.9
+tqdm>=4.66
+pillow>=10.0
+fastapi>=0.110
+uvicorn>=0.28
+python-multipart>=0.0.9
