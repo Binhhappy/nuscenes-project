@@ -1,4 +1,4 @@
-# VN-LiDAR Augment (N3-08C)
+# VN-LiDAR Augment
 
 Sinh dữ liệu LiDAR có sẵn nhãn 3D cho xe tự lái từ nuScenes: chèn vật thể thật vào cảnh khác và mô phỏng mưa / sương /
 giông theo đúng vật lý cảm biến, tạo các tình huống giao thông Việt Nam (bầy xe máy, xe ba gác, xe hàng rong, xe chở
