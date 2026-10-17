@@ -6,7 +6,7 @@ Output (config.AUGMENTED_DIR):
                                 object chèn), reject_stats + thống kê cho evaluate.py
 
 Chạy:
-    python task_a/run_insertion.py                                   # demo: sample[0] -> sample[10]
+    python task_a/run_insertion.py                                   # demo: template bank (scene khác) -> sample[10]
     python task_a/run_insertion.py --source-ann <ann_token> --target <sample_token>
     python task_a/run_insertion.py --source-sample <tok> --target <tok> --num-objects 3 --vis
     python task_a/run_insertion.py --from-bank --categories vehicle.motorcycle --num-objects 5
@@ -26,7 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import config  # noqa: E402
 from task_a.extract_object import (TemplateBank, extract_all_templates, extract_object_template,  # noqa: E402
                                    has_required_attributes)
-from task_a.ground_plane import (GroundModel, get_map_area, layers_for_category,  # noqa: E402
+from task_a.ground_plane import (ConsensusGround, get_map_area, layers_for_category,  # noqa: E402
                                  load_map_for_sample)
 from task_a.merge import create_annotation, insert_object, points_in_new_box  # noqa: E402
 from task_a.placement import sample_position_for_template, sample_valid_position  # noqa: E402
@@ -80,8 +80,9 @@ def run_insertion(nusc, target_token: str, templates: List[dict], n_attempts: in
                   max_tries: int = 5) -> dict:
     """Chèn lần lượt các template vào target sample. Trả về dict points + annotations + thống kê.
 
-    physical=True: đặt bằng sample_position_for_template (giữ khoảng cách + góc nhìn), yêu cầu thấy mặt đất,
-    xoá điểm trong box, xử lý che khuất; object còn < MIN_VISIBLE_POINTS điểm thì thử vị trí khác.
+    physical=True: đặt bằng sample_position_for_template (giữ khoảng cách + góc nhìn, cách box khác
+    >= config.COLLISION_MARGIN), yêu cầu thấy mặt đất ổn định (ConsensusGround), xoá điểm trong box,
+    xử lý che khuất; object còn < MIN_VISIBLE_POINTS điểm thì thử vị trí khác.
     physical=False: pipeline cũ (r, yaw ngẫu nhiên, chỉ concat) để so sánh.
     """
     rng = rng or np.random.default_rng(config.SEED)
@@ -89,7 +90,7 @@ def run_insertion(nusc, target_token: str, templates: List[dict], n_attempts: in
 
     points = get_pointcloud(nusc, target_token)
     existing = get_annotations(nusc, target_token)
-    ground = GroundModel.from_points(points, rng=rng)
+    ground = ConsensusGround.from_points(points)  # mặt đất chỉ tin ở chỗ mọi seed RANSAC đồng ý
     nusc_map = load_map_for_sample(nusc, target_token)
     areas = {}  # cache vùng đặt object theo bộ layer
     rejects = {}
@@ -161,25 +162,26 @@ if __name__ == "__main__":
     import argparse
 
     ap = argparse.ArgumentParser()
-    ap.add_argument("--source-sample", help="sample lấy object (mặc định sample[0])")
+    ap.add_argument("--source-sample", help="sample lấy object (bỏ trống: lấy từ template bank, khác scene đích)")
     ap.add_argument("--source-ann", nargs="*", help="annotation token cụ thể cần chèn")
     ap.add_argument("--target", help="sample token đích (mặc định sample[10])")
     ap.add_argument("--num-objects", type=int, default=3)
     ap.add_argument("--n-attempts", type=int, default=100)
     ap.add_argument("--seed", type=int, default=config.SEED)
     ap.add_argument("--categories", nargs="*", default=["vehicle"], help="prefix category của template")
-    ap.add_argument("--from-bank", action="store_true", help="lấy template từ TemplateBank thay vì source sample")
+    ap.add_argument("--from-bank", action="store_true",
+                    help="lấy template từ TemplateBank (mặc định khi không có --source-sample / --source-ann)")
     ap.add_argument("--naive", action="store_true", help="pipeline cũ (r, yaw ngẫu nhiên, không che khuất) để so sánh")
     ap.add_argument("--out-dir", default=config.AUGMENTED_DIR)
     ap.add_argument("--vis", action="store_true", help="mở Open3D sau khi chèn")
     args = ap.parse_args()
 
     nusc = load_nuscenes()
-    source = args.source_sample or nusc.sample[0]["token"]
     target = args.target or nusc.sample[10]["token"]
+    source = args.source_sample
 
     rng = np.random.default_rng(args.seed)
-    if args.from_bank and not args.source_ann:
+    if not args.source_ann and (args.from_bank or not source):  # đề bài: object lấy từ scene khác
         templates = collect_from_bank(nusc, target, args.num_objects, args.categories, rng=rng)
     else:
         templates = collect_templates(nusc, source, args.source_ann, args.num_objects, args.categories, rng)

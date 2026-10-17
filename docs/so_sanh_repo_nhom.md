@@ -87,3 +87,47 @@ Chất lượng có đảm bảo không — **số lượng được, chất lư
 4. **Kiểm tra bằng mắt theo mẫu**: không thể xem 100k khung; lấy ngẫu nhiên ~0.5-1% (500-1000 khung) xem trên trang demo
    kiểu CVAT.
 5. Tham số thời tiết và kích thước vật thể giả định cần hiệu chỉnh bằng số đo thật trước khi dùng để train hàng loạt.
+
+---
+
+# Nhánh `v3` của repo nhóm (commit `d44a137`, 2026-10-16)
+
+Nhánh `v3` tách từ commit `f81df17` của repo này, thêm 1 commit: 32 file code / tài liệu và 857 ảnh PNG
+(`assets/vn_objects/`, 16 lớp). Đã đọc toàn bộ diff, không chạy code.
+
+## 1. Cảnh báo — không đưa vào báo cáo
+
+| Hạng mục | Vấn đề |
+|---|---|
+| **Bảng kết quả T7** (mAP 0.448, NDS 0.551, recall bầy xe 92.4%, xe chở hàng 74.2%) trong `bao_cao_ket_qua.md`, `slides.html`, `index.html`, `ket_qua_mau/eval_report.json` | **Không có bằng chứng**: `tools/t7_train.py` chỉ chạy kiểm tra trên mô hình giả (`MockCenterPoint`), không có vòng huấn luyện, không có cấu hình `cfgs/t7_ft_frozen_replay.yaml`, không log, không checkpoint. Số NDS / mAP từng lớp chưa từng đo trong repo nào. Giống trường hợp số "AI benchmark" gõ tay ở mục 2 phía trên |
+| **Ảnh vật thể VN** (ba gác, xe máy chở hàng, chó, bò, xe bò...) | Lấy từ thư mục `C:\Users\QSKGM\.gemini\antigravity\brain\...` (tên file kiểu `vietnamese_golden_dog_front_view_v2_<số>.jpg`, "ảnh studio mới sinh") -> ảnh **do AI sinh**; không ghi nguồn / giấy phép. Ảnh xe / người lấy từ nuScenes bằng **Mask R-CNN** (mạng AI tách nền) |
+| **ControlNet / diffusion** (`camera_synthesis.generate_controlnet_conditions`, `run_controlnet_inpainting_hook`) | Hướng sinh ảnh bằng AI; trái với lập luận "sinh dữ liệu bằng luật vật lý" của đề tài |
+| **Khoảng cách tối thiểu 9 m** cho mọi vị trí chèn (`config.MIN_DISTANCE` 3 -> 9, mọi luật vị trí kịch bản VN >= 9 m) | Lý do ghi trong code: "bảo vệ nắp capo xe ego" (cho đẹp ảnh camera). Hệ quả: **mất đúng edge case** (xe cắt đầu 3-8 m, chó lao ra 5 m, bầy xe sát xe), mọi số đo đã báo cáo không còn tái lập được |
+| `_swarm_lane`: làn trái (y > 0) luôn **ngược chiều** | Đúng với giao thông bên phải (VN, Boston) nhưng **sai với Singapore** (đi bên trái) — một nửa nuScenes mini |
+| Xe đạp: nới **bỏ loại scene đích** khi ít mẫu, bỏ khớp góc nhìn, khoảng cách lệch tới 25 m | Vi phạm yêu cầu "chèn vào scene khác" và luật mật độ / mặt nhìn thấy |
+| `raycast.py`: thêm lốc máy / ống xả kim loại vào xe máy, đổi độ phản xạ vật liệu | Đổi dữ liệu LiDAR nhưng không đo lại (số 64% xe máy ray-cast không còn đúng); docstring ghi "micro-roughness, Lambert" nhưng chưa kiểm chứng |
+| `config._find_dataroot` | Đường dẫn cá nhân cứng (`D:\VinAI\Build phase\...`) |
+| `utils/io_converter.py` đọc `.bin` | Đoán số cột theo `len % 5`: file KITTI 4 cột có N chia hết cho 5 sẽ bị đọc sai thành 5 cột |
+
+## 2. Đã lấy vào repo này (ghi nguồn trong code)
+
+| Ý tưởng từ v3 | Cách lấy | File |
+|---|---|---|
+| 5 mặt ảnh (`front`, `oblique_front`, `side`, `oblique_rear`, `rear`) + nhiều biến thể mỗi mặt | Chọn mặt có góc tâm gần góc camera nhất; biến thể `<mặt>_*.png` cố định theo object (cùng object -> cùng ảnh ở mọi camera). Dùng ảnh Wikimedia có giấy phép, **không** dùng ảnh AI của v3 | `utils/camera_paste.py` |
+| Xuất nhiều định dạng (`io_converter.py`) | Chỉ lấy `.ply` (CloudCompare / MeshLab), tự viết, giữ đủ 5 trường (v3 qua open3d đổi intensity thành màu, mất cột ring); web app có nút tải `.ply` | `utils/pcd_io.py`, `webapp/` |
+
+Test: `tests/test_camera_paste.py::test_asset_view_nearest_and_variants`, `tests/test_raycast_storm.py::test_ply_roundtrip`.
+
+## 3. Đáng làm tiếp nhưng cần chạy thật (GPU)
+
+- **FrozenBatchNorm + đóng băng backbone khi fine-tune** (`t7_train.freeze_backbone_and_bn`): hướng đúng với nguyên nhân
+  đã nghi ở mục Hạn chế (BatchNorm với batch 2). Chỉ được ghi vào báo cáo **sau khi** huấn luyện + đo thật trong WSL.
+- Stage GPU trong `Dockerfile` (CUDA 11.8 + OpenPCDet): tiện để chạy detector trong container, nhưng cài OpenPCDet từ
+  nhánh mới nhất không ghim phiên bản; cần ghim commit và thử build.
+
+## 4. Repo này có, v3 chưa có (thêm sau khi v3 tách nhánh)
+
+Kiểm tra scene hợp lệ độc lập + chèn từ scene khác + đo scene/giờ wall-clock (`evaluate.py`), mặt đất đồng thuận
+3 RANSAC, lề an toàn 0.3 m, thời tiết v2 (bỏ điểm theo khoảng cách, nhiễu trên tia thật, backscatter thay điểm gốc),
+kiểm chứng mặt đường ướt bằng dữ liệu thật (`tools/wet_road_check.py`), dán ảnh nuScenes gốc theo tiêu chí rõ nhất +
+che khuất bằng LiDAR, ảnh Wikimedia có giấy phép + GrabCut, web: đổi seed khi sinh lại, ô "Dán ảnh object".

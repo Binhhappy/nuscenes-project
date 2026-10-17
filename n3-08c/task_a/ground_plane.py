@@ -126,6 +126,38 @@ class GroundModel:
         return bool(self.height_at(x, y, radius)[1][0] >= self.min_support)
 
 
+class ConsensusGround(GroundModel):
+    """Đồng thuận nhiều GroundModel dựng với các seed RANSAC khác nhau.
+
+    Ở vùng xa / bị che, ground candidate nằm sát mép band quanh plane: plane lệch nhẹ theo seed là vùng đó lúc có
+    lúc không có mặt đất, hoặc độ cao lệch 0.6-0.9 m (đo bằng evaluate.validate_scene). Ở đây một vị trí chỉ được
+    coi là thấy mặt đất khi MỌI model đều thấy và độ cao các model lệch nhau <= max_spread.
+    Seed cố định, không dùng rng của caller: chuỗi ngẫu nhiên của placement không đổi khi đổi số model.
+    """
+
+    def __init__(self, models: Sequence[GroundModel], max_spread: float = 0.15):
+        self.models = list(models)
+        self.max_spread = max_spread
+        first = self.models[0]
+        self.plane, self.ground_points = first.plane, first.ground_points
+        self.radius, self.min_support = first.radius, first.min_support
+        self._tree = first._tree
+
+    @classmethod
+    def from_points(cls, points: np.ndarray, seeds: Sequence[int] = (1, 2, 3), max_spread: float = 0.15,
+                    **kwargs) -> "ConsensusGround":
+        return cls([GroundModel.from_points(points, rng=np.random.default_rng(s), **kwargs) for s in seeds],
+                   max_spread)
+
+    def height_at(self, x, y, radius: Optional[float] = None) -> Tuple[np.ndarray, np.ndarray]:
+        """(z, support): z = median các model, support = min các model; lệch > max_spread thì support = 0."""
+        zs, sups = zip(*(m.height_at(x, y, radius) for m in self.models))
+        zs, sups = np.stack(zs), np.stack(sups)
+        support = sups.min(0)
+        support[zs.max(0) - zs.min(0) > self.max_spread] = 0
+        return np.median(zs, 0), support
+
+
 def project_z_to_ground(x: float, y: float, plane_coeffs: Union[Plane, GroundModel]) -> float:
     """z của mặt đất tại (x, y). plane_coeffs: (a, b, c, d) hoặc GroundModel (ưu tiên, chính xác hơn)."""
     if isinstance(plane_coeffs, GroundModel):

@@ -26,6 +26,7 @@ SEED: int = 42
 MIN_DISTANCE: float = 3.0           # khoảng cách tối thiểu từ sensor tới object chèn (m)
 MAX_DISTANCE: float = 70.0          # khoảng cách tối đa (m)
 COLLISION_IOU_THRESH: float = 0.0   # BEV IoU > ngưỡng này = va chạm
+COLLISION_MARGIN: float = 0.3       # (m) lề an toàn quanh footprint khi chèn object (Task A); kịch bản bầy xe dùng 0
 MIN_TEMPLATE_POINTS: int = 20       # template ít điểm hơn bị bỏ
 TEMPLATE_GROUND_MARGIN: float = 0.1  # bỏ điểm trong dải này phía trên đáy box (mặt đường lẫn vào); 0 = tắt
 TEMPLATE_CATEGORIES: tuple = ("vehicle", "human.pedestrian", "movable_object")  # prefix category cho bank
@@ -62,9 +63,15 @@ PLACEMENT_LAYERS: dict = {
 DEFAULT_LAYERS: tuple = ("drivable_area",)
 
 # ===== Task B: weather levels =====
+# Mô hình thời tiết: "v2" (mặc định) = bỏ điểm theo khoảng cách, nhiễu / backscatter nằm trên tia thật và thay điểm gốc
+# của tia đó (mỗi tia 1 điểm trả về). "v1" = bản cũ (bỏ điểm đều, nhiễu rải trong cầu, backscatter cộng thêm), giữ để
+# tái lập số đo detector thời tiết trong docs/bao_cao_ket_qua.md mục 3.2 (đo bằng v1): N308C_WEATHER_MODEL=v1
+WEATHER_MODEL: str = os.environ.get("N308C_WEATHER_MODEL", "v2")
+# dropout: tỉ lệ điểm mất trung bình. v1 bỏ đều; v2 bỏ theo p = 1 - exp(-r / drop_range), drop_range hiệu chỉnh
+# để tỉ lệ mất trung bình trên scan nuScenes mini thật (median r ~6 m) vẫn bằng dropout.
 RAIN_LEVELS: dict = {
-    "light": {"dropout": 0.1, "noise_ratio": 0.03},
-    "moderate": {"dropout": 0.2, "noise_ratio": 0.07},
-    "heavy": {"dropout": 0.3, "noise_ratio": 0.12},
+    "light": {"dropout": 0.1, "noise_ratio": 0.03, "drop_range": 89.4},
+    "moderate": {"dropout": 0.2, "noise_ratio": 0.07, "drop_range": 38.3},
+    "heavy": {"dropout": 0.3, "noise_ratio": 0.12, "drop_range": 21.5},
 }
 FOG_VISIBILITY: dict = {"light": 200.0, "moderate": 50.0, "dense": 20.0}  # (m)

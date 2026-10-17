@@ -6,7 +6,7 @@ const CAM_VI = {CAM_FRONT_LEFT: "Trước trái", CAM_FRONT: "Trước", CAM_FRO
 const SURROUND = Object.keys(CAM_VI);
 const LEVEL_VI = {light: "nhẹ", moderate: "vừa", heavy: "to", dense: "dày", storm: "giông bão"};
 const WEATHER_VI = {none: "Trời trong", rain: "Mưa", fog: "Sương mù", storm: "Giông / bão"};
-let META = null, TASK = null, GEN_DATA = null, RESULTS = null, MODE = "preset";
+let META = null, TASK = null, GEN_DATA = null, RESULTS = null, MODE = "preset", LAST_SEED = null;
 const TYPE_VI = {car: "Ô tô (thật)", truck: "Xe tải (thật)", bus: "Xe buýt (thật)", moto: "Xe máy 1 người (thật)",
   bicycle: "Xe đạp (thật)", pedestrian: "Người đi bộ (thật)", moto_multi: "Xe máy chở 2-3 người", moto_cargo: "Xe máy chở hàng cồng kềnh",
   ba_gac: "Xe ba gác", moto_tow: "Xe máy kéo thùng", vendor_cart: "Xe hàng rong", dog: "Chó", cow: "Trâu / bò",
@@ -52,6 +52,14 @@ function lightbox(src) { const lb = $("#lightbox"); lb.querySelector("img").src 
 $("#lightbox").onclick = () => $("#lightbox").classList.add("hidden");
 document.addEventListener("keydown", e => { if (e.key === "Escape") $("#lightbox").classList.add("hidden"); });
 
+const PASTE_VI = {pasted: "đã dán", pasted_asset: "đã dán (ảnh tải về)", pasted_relaxed: "đã dán (ảnh khác điều kiện sáng)", no_source: "ray-cast, không có ảnh gốc", source_occluded: "ảnh gốc bị che",
+  source_too_small: "ảnh gốc quá nhỏ", source_blurry: "ảnh gốc nhoè", source_not_in_camera: "không camera nào thấy trọn",
+  condition_mismatch: "khác điều kiện đêm / mưa", lighting_mismatch: "lệch ánh sáng", view_mismatch: "lệch góc nhìn", bad_fit: "biến đổi phối cảnh lệch"};
+async function loadCams() {  // 6 camera của task hiện tại, có / không dán ảnh object
+  const r = await api(`/api/cameras/${TASK}?paste=${$("#chk-paste").checked ? 1 : 0}`);
+  renderCams($("#cams-gen"), r.cameras);
+  $("#paste-info").textContent = r.paste ? Object.entries(r.paste).map(([k, v]) => `${PASTE_VI[k] || k} ${v}`).join(" · ") : "";
+}
 function renderCams(el, cams) {  // cams: [{channel, objects, image}]
   el.innerHTML = cams.map(c => `<div class="cam${c.objects ? " hit" : ""}" data-src="${c.image}">
     <img src="${c.image}" alt="${c.channel}"><span class="lab">${CAM_VI[c.channel] || c.channel}</span>
@@ -81,6 +89,8 @@ async function initGen() {
   seg("seg-disp", v => viewers.gen.setDisplay(v));
   seg("seg-view", v => viewers.gen.setView(v, GEN_DATA ? centerOf(GEN_DATA.boxes) : [0, 0]));
   $("#inp-psize").oninput = e => viewers.gen.setPointSize(+e.target.value);
+  $("#chk-paste").onchange = async () => { if (!TASK) return; $("#loading").classList.remove("hidden"); $("#loading-text").textContent = "Đang chiếu lên 6 camera…";
+    try { await loadCams(); } catch (e) { alertBox(e.message); } $("#loading").classList.add("hidden"); };
   $("#btn-cam-toggle").onclick = () => { const g = $("#cams-gen"); g.classList.toggle("hidden"); $("#btn-cam-toggle").textContent = g.classList.contains("hidden") ? "Mở rộng" : "Thu gọn"; viewers.gen.resize(); };
   $("#btn-rand").onclick = () => $("#inp-seed").value = Math.floor(Math.random() * 10000);
   META = await api("/api/meta");
@@ -119,16 +129,18 @@ async function initGen() {
 
 async function runGen() {
   $("#loading").classList.remove("hidden"); $("#loading-text").textContent = "Đang sinh kịch bản + chèn theo vật lý LiDAR…";
+  // cùng seed thì backend sinh lại đúng kết quả cũ: bấm Sinh lần nữa mà không giữ seed -> đổi seed để ra kịch bản mới
+  if (!$("#chk-keep-seed").checked && +$("#inp-seed").value === LAST_SEED) $("#inp-seed").value = Math.floor(Math.random() * 10000);
   try {
     const body = {sample_token: $("#sel-sample").value, scenario: MODE === "custom" ? "custom" : $("#sel-scenario").value, seed: +$("#inp-seed").value,
       weather: $("#sel-weather").value, level: $("#sel-level").value || null, puddles: +$("#inp-puddles").value, sweeps: $("#chk-sweeps").checked,
       custom: MODE === "custom" ? customGroups() : null};
     const r = await api("/api/generate", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
-    TASK = r.task_id; GEN_DATA = r.preview;
+    TASK = r.task_id; GEN_DATA = r.preview; LAST_SEED = body.seed;
     viewers.gen.setData({augmented: r.preview.augmented, original: r.preview.original, obj: r.preview.obj, boxes: r.preview.boxes, preds: [], stride: 4});
     viewers.gen.setView("iso", centerOf(r.preview.boxes));
     const s = r.stats, rej = Object.entries(s.reject_stats || {}).map(([k, v]) => `${k} ${v}`).join(", ") || "–";
-    $("#stats").innerHTML = `<div class="flex justify-between"><b class="text-cyan-300">${s.scenario}</b><span class="text-emerald-400 font-mono">${s.elapsed_ms} ms</span></div>
+    $("#stats").innerHTML = `<div class="flex justify-between"><b class="text-cyan-300">${s.scenario} <span class="text-slate-400 font-normal">· seed ${body.seed}</span></b><span class="text-emerald-400 font-mono">${s.elapsed_ms} ms</span></div>
       <div class="flex justify-between"><span class="text-slate-400">Object chèn</span><b>${s.inserted}/${s.requested}</b></div>
       <div class="flex justify-between"><span class="text-slate-400">Object "khó" (&lt; 5 điểm)</span><b>${s.difficult}</b></div>
       <div class="flex justify-between"><span class="text-slate-400">Điểm LiDAR</span><span class="font-mono">${s.points_before.toLocaleString()} → ${s.points_after.toLocaleString()}</span></div>
@@ -138,11 +150,11 @@ async function runGen() {
          <span class="${g.placed < g.requested ? "text-amber-400" : "text-emerald-400"}">${g.placed}/${g.requested}</span></div>`).join("")}</div>` : ""}
       <div class="text-[11px] text-slate-500">Vị trí bị loại: ${rej}</div><div id="det-summary"></div>`;
     $("#stats").classList.remove("hidden");
-    ["pcd", "bin", "labels", "zip"].forEach(k => $(`#dl-${k}`).href = r.downloads[k]);
+    ["pcd", "ply", "bin", "labels", "zip"].forEach(k => $(`#dl-${k}`).href = r.downloads[k]);
     $("#dl").classList.remove("hidden");
     $("#btn-detect").disabled = !(META.detector && body.sweeps);
     $("#loading-text").textContent = "Đang chiếu lên 6 camera…";
-    renderCams($("#cams-gen"), (await api(`/api/cameras/${TASK}`)).cameras);
+    await loadCams();
   } catch (e) { alertBox(e.message); }
   $("#loading").classList.add("hidden");
 }
@@ -157,7 +169,7 @@ async function runDetect() {
     viewers.gen.setData({augmented: GEN_DATA.augmented, original: GEN_DATA.original, obj: GEN_DATA.obj, boxes: GEN_DATA.boxes, preds: r.preds, stride: 4});
     const sm = r.summary;
     $("#det-summary").innerHTML = `<div class="mt-1 pt-1 border-t border-dark-600"><b>Detector:</b> đúng <b class="text-emerald-400">${sm.detected}</b>/${sm.total} · nhầm lớp <b class="text-amber-400">${sm.confused}</b> · bỏ sót <b class="text-red-400">${sm.missed}</b></div>`;
-    renderCams($("#cams-gen"), (await api(`/api/cameras/${TASK}`)).cameras);
+    await loadCams();
   } catch (e) { alertBox(e.message); }
   finally { $("#loading").classList.add("hidden"); }
 }

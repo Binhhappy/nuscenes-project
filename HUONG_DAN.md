@@ -20,13 +20,11 @@ Dự án sinh dữ liệu LiDAR tổng hợp từ nuScenes v1.0-mini:
 ├── nuscenes-env\               # virtualenv Python 3.10 — KHÔNG có trong git, tự tạo (mục 2.3)
 ├── output\                     # kết quả sinh ra khi chạy — KHÔNG có trong git
 │   ├── templates\              # template bank (<category>\<ann_token>.npz + bank.json)
-│   ├── augmented\              # Task A: <sample_token>.bin + .json
-│   ├── weather\                # Task B: original\, rain_<level>\, fog_<level>\
-│   ├── vis\                    # ảnh BEV (.png)
-│   └── eval_report.json        # kết quả evaluate.py
-├── docs\ket_qua_mau\           # kết quả mẫu để đối chiếu (mục 4)
-├── extract_objects.py          # script cũ, không dùng nữa (thay bằng task_a/extract_object.py)
-├── verify_setup.py, verify_map.py   # script kiểm tra cũ, không dùng nữa (đường dẫn hard-code)
+│   ├── augmented_eval*\        # Task A (+ thời tiết): <sample_token>.bin + .json + batch_timing.json
+│   ├── weather\                # Task B: original\, rain_<level>\, fog_<level>\, storm_storm\
+│   ├── vis\                    # ảnh BEV / camera (.png)
+│   └── eval_report_insertion*.json  # kết quả evaluate.py (chỉ số đề bài)
+├── assets\vn_objects\          # ảnh PNG nền trong suốt để dán vật thể lên camera (README.md, SOURCES.md)
 └── n3-08c\                     # CODE CHÍNH
     ├── config.py               # đường dẫn, seed, ngưỡng, tham số ground/weather
     ├── verify_setup.py         # kiểm tra dữ liệu + môi trường
@@ -227,13 +225,25 @@ Output (`output\weather\`):
 
 ```powershell
 python evaluate.py                       # đánh giá kết quả có sẵn trong output\
-python evaluate.py --run-insertion 20    # chạy Task A trên 20 sample rồi đánh giá
+python evaluate.py --run-insertion 100 --augmented-dir ..\output\augmented_eval   # 100 sample rải đều, template từ scene khác
+python evaluate.py --run-insertion 100 --weather rain heavy --augmented-dir ..\output\augmented_eval_rain   # chèn + mưa
 python evaluate.py --run-insertion 20 --naive --augmented-dir ..\output\augmented_naive   # bản cũ để so
 ```
 
-Kết quả in ra màn hình và lưu `output\eval_report.json`:
+`--run-insertion` cần thư mục `--augmented-dir` trống, để số đo không bị trộn với kết quả cũ. Template lấy từ template
+bank và loại scene đích. Thêm `--num-objects`, `--categories`, `--out` nếu cần.
 
-- `insertion`: `valid_rate` (inserted / requested), `total_objects`, `scenes_per_hour`, `per_category`, `reject_stats`.
+Kết quả in ra màn hình và lưu `output\eval_report.json` (hoặc file ở `--out`):
+
+- `validity` (**chỉ số đề bài**): kiểm tra lại từng scene trên file đầu ra, độc lập với bộ đặt vị trí.
+  - `valid_scene_rate`: tỉ lệ scene có >= 1 object chèn, không chồng box BEV, đúng layer bản đồ và đáy chạm mặt đất.
+  - `complete_scene_rate`: như trên và chèn đủ số object yêu cầu.
+  - `cross_scene_rate`: tỉ lệ scene mà mọi template đến từ scene khác.
+  - `fail_reasons` và `invalid_scenes`: lý do một scene không hợp lệ.
+- `insertion`: `valid_rate` (object chèn được / yêu cầu, tính theo object), `total_objects`, `per_category`, `reject_stats`.
+  - `scenes_per_hour` (**chỉ số đề bài**): wall-clock cả batch từ `batch_timing.json`, gồm lấy template, chèn, thời tiết
+    và ghi file. `scenes_per_hour_core` chỉ tính thời gian trong `run_insertion`.
+  - `timing`: thời gian từng bước và thông tin máy.
 - `insertion.quality` (chỉ số vật lý): `facing_ok_rate` (mặt có điểm quay về sensor), `ground_supported_rate` (đặt ở chỗ LiDAR thấy mặt đất), `density_ratio_median` (số điểm / số điểm object thật cùng lớp, cùng khoảng cách, lấy từ template bank; ~1 là đúng), `visible_ratio_mean`.
 
 Đo trên 30 sample đầu (seed 42), pipeline cũ (`--naive`) so với pipeline mới:
@@ -262,8 +272,8 @@ python tools/dataset_gap.py --version v1.0-trainval    # chỉ cần gói metada
 
 ## 4. Kết quả mong đợi
 
-Số liệu dưới đây chạy trên nuScenes v1.0-mini, `SEED = 42`. File gốc và ảnh nằm trong [docs/ket_qua_mau/](docs/ket_qua_mau/).
-Chạy cùng dữ liệu, cùng seed thì các con số (trừ thời gian chạy) phải giống hoặc rất gần.
+Số liệu dưới đây chạy trên nuScenes v1.0-mini, `SEED = 42`. Chạy cùng dữ liệu, cùng seed thì các con số (trừ thời gian
+chạy) phải giống hoặc rất gần. File kết quả: `output/eval_report_insertion*.json`, `output/weather/`.
 
 ### 4.1. Template bank (`extract_object.py --build`)
 
@@ -281,48 +291,42 @@ Tổng **4111 template**, 14 category:
 
 ### 4.2. Task A — chèn object
 
-Số liệu và ảnh mẫu trong mục này tạo bằng pipeline hiện tại (có luật vật lý), seed 42.
+Chỉ số đề bài, 100 scene (`python evaluate.py --run-insertion 100 --augmented-dir ..\output\augmented_eval`):
+`valid_scene_rate` 1.00, `complete_scene_rate` 0.59, `cross_scene_rate` 1.00, 253 object (0 chồng box, 0 ngoài đường,
+0 lệch mặt đất), `scenes_per_hour` khoảng 9 400 (phụ thuộc máy). Kèm mưa to / sương dày: 0.99 / 1.00 scene hợp lệ,
+khoảng 9 400 scene/giờ.
 
-Mẫu: [docs/ket_qua_mau/023c4df2d451409881d8e6ea82f14704.json](docs/ket_qua_mau/023c4df2d451409881d8e6ea82f14704.json) (target `023c4df2...`, chèn 2/2 object, khoảng 2.4 s):
+Thời tiết mặc định là mô hình v2. Muốn tái lập số detector thời tiết cũ (đo bằng v1) thì đặt `$env:N308C_WEATHER_MODEL="v1"`.
+`evaluate.py` báo thêm `by_range` cho mỗi thư mục thời tiết: tỉ lệ điểm gốc còn lại và tỉ lệ nhiễu theo dải 0-10 / 10-30 / 30+ m.
+Chi tiết: [docs/bao_cao_ket_qua.md](docs/bao_cao_ket_qua.md) mục 0.
 
-- `vehicle.truck` tại (3.0, -15.3): 474 điểm, r 15.9 → 15.6 m, `facing_cos` +0.99.
-- `vehicle.car` tại (7.9, 27.5): 27 / 41 điểm còn thấy (dời ra xa r 21.6 → 28.7 m nên bị subsample), `facing_cos` +0.98.
+| Chỉ số chất lượng (100 scene, chỉ chèn) | Giá trị |
+| --- | --- |
+| `facing_ok_rate` | 0.85 (còn lại nhìn ngang hông, cos ≈ 0) |
+| `ground_supported_rate` | 1.00 |
+| `density_ratio_median` | 1.01 (số điểm / object thật cùng lớp, cùng khoảng cách) |
+| `visible_ratio_mean` | 0.67 |
 
-Kết quả đánh giá insertion (6 scene, `python evaluate.py --run-insertion 6`):
-
-| Chỉ số                  | Giá trị                                           |
-| ------------------------- | --------------------------------------------------- |
-| `valid_rate`            | 0.89 (8/9 object chèn được)                     |
-| `total_objects`         | 8 (vehicle.truck 6, vehicle.car 2)                  |
-| `scenes_per_hour`       | khoảng 1670 (phụ thuộc máy)                     |
-| `reject_stats`          | `off_area` 135, `no_ground` 16, `collision` 7 |
-| `facing_ok_rate`        | 1.00                                                |
-| `ground_supported_rate` | 1.00                                                |
-| `density_ratio_median`  | 0.98                                                |
-| `visible_ratio_mean`    | 0.84                                                |
-
-Ảnh BEV: object chèn vào phải nằm trên vùng đường, không chồng lên box có sẵn, chân chạm mặt đất, điểm nằm ở mặt quay về sensor.
-
-![Task A](docs/ket_qua_mau/insertion_023c4df2d451409881d8e6ea82f14704.png)
+Xem tận mắt: `python task_a/run_insertion.py --vis` (template từ scene khác -> sample[10]) lưu ảnh BEV vào `output\vis\`.
+Object chèn phải nằm trên vùng đường, không chồng box có sẵn, chân chạm mặt đất, điểm nằm ở mặt quay về sensor.
 
 ### 4.3. Task B — thời tiết
 
-Sample `ca9a282c...` (sample[0]), point cloud gốc khoảng 34 700 điểm, intensity trung bình 19.85.
+Sample `ca9a282c...` (sample[0]), point cloud gốc 34 688 điểm, intensity trung bình 19.85. Mô hình thời tiết v2
+(`python task_b/run_weather.py --all-levels`, rồi `python evaluate.py`).
 
-| Weather / level | Tỉ lệ điểm còn lại | Số điểm thay đổi | Intensity TB sau |
-| --------------- | ------------------------ | --------------------- | ---------------- |
-| rain light      | 0.932                    | -2 359                | 17.36            |
-| rain moderate   | 0.871                    | -4 466                | 15.21            |
-| rain heavy      | 0.820                    | -6 247                | 12.48            |
-| fog light       | 0.950                    | -1 749                | 18.79            |
-| fog moderate    | 0.842                    | -5 471                | 16.90            |
-| fog dense       | 0.707                    | -10 154               | 14.87            |
+| Weather / level | Tỉ lệ điểm còn lại | Số điểm thay đổi | Intensity TB sau | Điểm gốc còn lại 0-10 / 10-30 / 30+ m |
+| --- | --- | --- | --- | --- |
+| rain light | 0.892 | -3 743 | 17.65 | 0.93 / 0.80 / 0.59 |
+| rain moderate | 0.798 | -6 996 | 16.22 | 0.84 / 0.60 / 0.29 |
+| rain heavy | 0.714 | -9 905 | 13.94 | 0.74 / 0.42 / 0.12 |
+| fog light | 0.947 | -1 827 | 18.79 | 0.98 / 0.92 / 0.79 |
+| fog moderate | 0.824 | -6 104 | 16.89 | 0.91 / 0.70 / 0.40 |
+| fog dense | 0.674 | -11 323 | 14.76 | 0.78 / 0.41 / 0.11 |
+| storm | 0.674 | -11 311 | 14.29 | 0.71 / 0.34 / 0.08 |
 
-Cách đọc: level càng nặng thì càng mất nhiều điểm và intensity càng giảm. Kết quả sai nếu không theo xu hướng này.
-
-![Task B](docs/ket_qua_mau/weather_ca9a282c9e77460f8360f564131a8af5.png)
-
-Ảnh khác trong `docs/ket_qua_mau/`: `bev_*` (point cloud gốc), `ground_*` (mặt đất ước lượng), `drivable_*` (vùng được phép đặt object).
+Cách đọc: level càng nặng thì càng mất nhiều điểm, intensity càng giảm, và càng xa càng mất nhiều. Kết quả sai nếu
+không theo xu hướng này. Ảnh so sánh: `output\vis\weather_<token>.png`.
 
 ---
 
@@ -376,10 +380,12 @@ Trước khi push code, chạy `pytest tests/` và đảm bảo không có test 
 | Chung         | `SEED = 42`                                                                     | đổi seed thì kết quả mục 4 sẽ khác                                                  |
 | Task A        | `MIN_DISTANCE`, `MAX_DISTANCE`                                                | khoảng cách đặt object (m)                                                              |
 |               | `COLLISION_IOU_THRESH`                                                          | BEV IoU > ngưỡng = va chạm                                                               |
+|               | `COLLISION_MARGIN`                                                              | lề an toàn (m) giữa box khi chèn (Task A); kịch bản bầy xe dùng 0                        |
 |               | `MIN_TEMPLATE_POINTS`, `TEMPLATE_GROUND_MARGIN`, `TEMPLATE_CATEGORIES`      | lọc template                                                                               |
 |               | `GROUND`                                                                        | tham số RANSAC + GroundModel                                                               |
 |               | `PLACEMENT_LAYERS`, `DEFAULT_LAYERS`                                          | map layer hợp lệ theo category                                                            |
 | Task B        | `RAIN_LEVELS`, `FOG_VISIBILITY`                                               | thêm level mới ở đây                                                                   |
+|               | `WEATHER_MODEL` (env `N308C_WEATHER_MODEL`)                                   | `v2` mặc định; `v1` để tái lập số đo thời tiết cũ                                      |
 
 ### Quy ước dữ liệu
 
@@ -411,7 +417,7 @@ Trước khi push code, chạy `pytest tests/` và đảm bảo không có test 
 - Cập nhật code mới nhất trước khi làm: `git pull`.
 - Làm trên nhánh riêng, ví dụ `git checkout -b task-b-snow`, rồi tạo Pull Request.
 - Thêm thư viện mới thì ghi kèm phiên bản vào `n3-08c\requirements.txt`.
-- Thay đổi làm kết quả mục 4 khác đi thì cập nhật lại `docs\ket_qua_mau\` và bảng ở mục 4.
+- Thay đổi làm kết quả mục 4 khác đi thì chạy lại lệnh tương ứng và cập nhật bảng ở mục 4.
 
 ---
 

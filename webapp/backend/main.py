@@ -74,10 +74,11 @@ def generate(req: GenerateRequest):
 
 
 @app.get("/api/cameras/{task_id}")
-def cameras(task_id: str):
+def cameras(task_id: str, paste: bool = True):
+    """paste: dán ảnh 2D object chèn cắt từ ảnh camera gốc của nó (n3-08c/utils/camera_paste.py)."""
     if not (TASKS / task_id / "state.json").is_file():
         raise HTTPException(404, "không có task")
-    return engine.cameras(task_id)
+    return engine.cameras(task_id, paste=paste)
 
 
 @app.post("/api/detect/{task_id}")
@@ -109,7 +110,7 @@ def case(name: str):
 
 @app.get("/api/download/{task_id}/{kind}")
 def download(task_id: str, kind: str):
-    files = {"pcd": "augmented.pcd", "bin": "augmented.bin", "labels": "labels.json", "zip": "bundle.zip"}
+    files = {"pcd": "augmented.pcd", "ply": "augmented.ply", "bin": "augmented.bin", "labels": "labels.json", "zip": "bundle.zip"}
     if kind not in files or "/" in task_id or "\\" in task_id or ".." in task_id:
         raise HTTPException(400, "yêu cầu không hợp lệ")
     p = TASKS / task_id / files[kind]

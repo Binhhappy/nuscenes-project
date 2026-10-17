@@ -1,8 +1,9 @@
 """Chiếu LiDAR (LIDAR_TOP sensor frame của keyframe) lên 6 camera nuScenes + vẽ box 3D / điểm object chèn.
 
 Dùng chung cho ảnh demo tĩnh (tools/case_gallery.py) và web app (webapp/backend).
-Ảnh camera là ảnh thật của nuScenes: object chèn KHÔNG có trong ảnh (chỉ chèn vào LiDAR), chỉ hiện qua box chiếu +
-điểm LiDAR chiếu lên. Thời tiết ảnh: task_b/camera_weather.py.
+Ảnh camera là ảnh thật của nuScenes. Mặc định object chèn chỉ hiện qua box chiếu + điểm LiDAR chiếu lên;
+render_camera(paste=True) dán thêm ảnh 2D object cắt từ ảnh camera gốc của nó (utils/camera_paste.py).
+Thời tiết ảnh: task_b/camera_weather.py.
 """
 from typing import Dict, Optional, Sequence, Tuple
 
@@ -43,14 +44,30 @@ def project(T: np.ndarray, K: np.ndarray, xyz: np.ndarray, w: int = 1600, h: int
 
 
 def render_camera(nusc, sample_token: str, cam: str, boxes: Sequence[dict], obj_points: Optional[np.ndarray] = None,
-                  size=(800, 450), weather: Optional[str] = None, level: Optional[str] = None, seed: int = 0):
+                  size=(800, 450), weather: Optional[str] = None, level: Optional[str] = None, seed: int = 0,
+                  paste: bool = False, paste_status: Optional[dict] = None, paste_cache: Optional[dict] = None):
     """Ảnh camera (PIL RGB) + box chiếu lên. boxes: dict có translation/size/rotation (annotation) + "status"
-    (ok / missed / confused / inserted / real) + "inserted" (bool). Returns (ảnh, số object chèn thấy được)."""
+    (ok / missed / confused / inserted / real) + "inserted" (bool). Returns (ảnh, số object chèn thấy được).
+
+    paste=True: dán ảnh 2D object chèn cắt từ ảnh camera gốc của nó (utils/camera_paste.py) trước khi phủ thời tiết
+    và vẽ box. paste_status: dict đếm trạng thái dán (cộng dồn). paste_cache: cache ảnh / ứng viên nguồn."""
     from PIL import Image, ImageDraw
 
     from utils.visualization import to_box
     T, K, img_path = lidar_to_cam(nusc, sample_token, cam)
-    img = Image.open(img_path).convert("RGB").resize(size)
+    img = Image.open(img_path).convert("RGB")
+    if paste:
+        from utils.camera_paste import paste_objects, scene_conditions
+        ins = [b for b in boxes if b.get("inserted")]
+        arr, status, _ = paste_objects(nusc, np.asarray(img), T, K, ins, [b for b in boxes if not b.get("inserted")],
+                                       paste_cache if paste_cache is not None else {},
+                                       scene_conditions(nusc, sample_token))
+        img = Image.fromarray(arr)
+        if paste_status is not None:
+            for s in status:
+                if s != "not_in_view":
+                    paste_status[s] = paste_status.get(s, 0) + 1
+    img = img.resize(size)
     if weather:
         from task_b.camera_weather import apply_camera_weather
         img = Image.fromarray(apply_camera_weather(np.asarray(img), weather, level, np.random.default_rng(seed)))

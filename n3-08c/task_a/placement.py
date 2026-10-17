@@ -36,10 +36,14 @@ def bev_iou(a: Polygon, b: Polygon) -> float:
     return inter / (a.area + b.area - inter + 1e-9)
 
 
-def check_collision_bev(new_box: dict, existing_boxes: Sequence[dict]) -> bool:
-    """True nếu new_box có BEV IoU > COLLISION_IOU_THRESH với bất kỳ box nào."""
+def check_collision_bev(new_box: dict, existing_boxes: Sequence[dict], margin: float = 0.0) -> bool:
+    """True nếu new_box có BEV IoU > COLLISION_IOU_THRESH với bất kỳ box nào.
+
+    margin (m): nới footprint của new_box ra mỗi phía (góc vuông), box cách nhau < margin cũng tính va chạm.
+    """
     fp = box_footprint(new_box)
-    # TODO: buffer footprint thêm margin an toàn (vd 0.3 m) để object không dính sát nhau.
+    if margin > 0:
+        fp = fp.buffer(margin, join_style=2)
     return any(bev_iou(fp, box_footprint(b)) > config.COLLISION_IOU_THRESH for b in existing_boxes)
 
 
@@ -94,18 +98,18 @@ def count_obstacle_points(points: np.ndarray, center_xy: Sequence[float], size: 
 
 def check_position(area: BaseGeometry, existing_boxes: Sequence[dict], size: Sequence[float],
                    x: float, y: float, yaw: float, ground=None, points: Optional[np.ndarray] = None,
-                   max_obstacle_points: int = config.MAX_OBSTACLE_POINTS) -> Optional[str]:
+                   max_obstacle_points: int = config.MAX_OBSTACLE_POINTS, margin: float = 0.0) -> Optional[str]:
     """None nếu (x, y, yaw) hợp lệ, ngược lại lý do reject (REJECT_REASONS).
 
-    Hợp lệ: footprint nằm trong area, LiDAR thấy mặt đất tại đó (ground.is_supported), không va chạm BEV,
-    ít điểm vật cản không nhãn trong footprint (cần points + ground).
+    Hợp lệ: footprint nằm trong area, LiDAR thấy mặt đất tại đó (ground.is_supported), không va chạm BEV
+    (cách box khác >= margin m), ít điểm vật cản không nhãn trong footprint (cần points + ground).
     """
     if not area.contains(bev_footprint((x, y), size, yaw)):
         return "off_area"
     if ground is not None and not ground.is_supported(x, y):
         return "no_ground"
     box = {"translation": [x, y, 0.0], "size": list(size), "rotation": yaw_to_quaternion(yaw)}
-    if check_collision_bev(box, existing_boxes):
+    if check_collision_bev(box, existing_boxes, margin):
         return "collision"
     if points is not None and ground is not None and count_obstacle_points(
             points, (x, y), size, yaw, float(ground.height_at(x, y)[0][0])) > max_obstacle_points:
@@ -118,7 +122,8 @@ def sample_position_for_template(area: BaseGeometry, existing_boxes: Sequence[di
                                  rng: Optional[np.random.Generator] = None, r_jitter: float = 0.05,
                                  r_scale_max: float = config.MAX_DISTANCE_SCALE,
                                  max_obstacle_points: int = config.MAX_OBSTACLE_POINTS,
-                                 stats: Optional[dict] = None) -> Optional[Position]:
+                                 stats: Optional[dict] = None,
+                                 margin: float = config.COLLISION_MARGIN) -> Optional[Position]:
     """Đặt template bằng cách xoay quanh sensor: giữ khoảng cách r và góc nhìn (view_angle) của template.
 
     Phép xoay quanh trục z của sensor giữ nguyên khoảng cách, góc ngước và mặt mà LiDAR nhìn thấy,
@@ -129,7 +134,7 @@ def sample_position_for_template(area: BaseGeometry, existing_boxes: Sequence[di
     vì không thể tự sinh điểm thật.
 
     Hợp lệ khi: footprint nằm trong area, LiDAR thấy mặt đất tại đó (ground.is_supported),
-    không va chạm BEV, ít điểm vật cản không nhãn trong footprint (cần points + ground).
+    không va chạm BEV (cách box khác >= margin m), ít điểm vật cản không nhãn trong footprint (cần points + ground).
     stats: dict đếm lý do reject (REJECT_REASONS), cộng dồn qua các lần gọi.
     """
     rng = rng or np.random.default_rng()
@@ -140,7 +145,7 @@ def sample_position_for_template(area: BaseGeometry, existing_boxes: Sequence[di
         x, y = r * np.cos(phi), r * np.sin(phi)
         yaw = float(wrap_angle(phi - view))
         reason = check_position(area, existing_boxes, template["size"], x, y, yaw, ground, points,
-                                max_obstacle_points)
+                                max_obstacle_points, margin)
         if reason is None:
             return float(x), float(y), yaw
         if stats is not None:

@@ -90,6 +90,15 @@ def test_pcd_roundtrip(tmp_path):
     assert np.array_equal(load_pcd(str(tmp_path / "a.pcd")), pts)
 
 
+def test_ply_roundtrip(tmp_path):
+    from utils.pcd_io import load_ply, save_ply
+    pts = np.random.default_rng(0).normal(size=(500, 5)).astype(np.float32)
+    save_ply(pts, str(tmp_path / "a.ply"))
+    assert np.array_equal(load_ply(str(tmp_path / "a.ply")), pts)
+    head = open(tmp_path / "a.ply", "rb").read(200).decode("ascii", "ignore")
+    assert "element vertex 500" in head and "property float intensity" in head and "property float ring" in head
+
+
 def test_vn_categories_map_to_classes():
     assert detection_class("vn.moto_multi") == "motorcycle"
     assert detection_class("vn.ba_gac") == "obstacle:ba_gac"

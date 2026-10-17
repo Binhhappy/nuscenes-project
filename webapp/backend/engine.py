@@ -42,6 +42,7 @@ class Engine:
     def __init__(self):
         self._lock = threading.Lock()
         self._nusc = self._bank = self._det = None
+        self._paste_cache = {}  # ảnh / ứng viên nguồn cho camera_paste (dùng lại giữa các lần chiếu)
         self.detector_error = None
 
     # ---------- tài nguyên dùng chung (nạp 1 lần) ----------
@@ -140,9 +141,10 @@ class Engine:
                 aug = aug[puddle_mask(aug, rng, puddles)]
         # file tải về
         from utils.nuscenes_loader import save_bin
-        from utils.pcd_io import save_pcd
+        from utils.pcd_io import save_pcd, save_ply
         save_bin(str(tdir / "augmented.bin"), aug)
         save_pcd(aug, str(tdir / "augmented.pcd"))
+        save_ply(aug, str(tdir / "augmented.ply"))
         labels = [{"category": a["category"], "detection_class": detection_class(a["category"]),
                    "translation": a["translation"], "size": a["size"], "rotation": a["rotation"],
                    "velocity_sensor": a.get("velocity_sensor"), "num_lidar_pts": a["num_lidar_pts"],
@@ -153,7 +155,7 @@ class Engine:
                 "reject_stats": r["reject_stats"]}
         (tdir / "labels.json").write_text(json.dumps(info, ensure_ascii=False, indent=1), encoding="utf-8")
         with zipfile.ZipFile(tdir / "bundle.zip", "w", zipfile.ZIP_DEFLATED) as z:
-            for f in ("augmented.bin", "augmented.pcd", "labels.json"):
+            for f in ("augmented.bin", "augmented.pcd", "augmented.ply", "labels.json"):
                 z.write(tdir / f, f)
         state = {"sample_token": sample_token, "scenario": scenario, "weather": weather, "level": level,
                  "annotations": r["annotations_sensor"], "existing": r["existing_annotations"], "sweeps": sweeps}
@@ -165,7 +167,7 @@ class Engine:
                           "points_before": int(len(orig)), "points_after": int(len(aug)),
                           "elapsed_ms": round(1000 * (time.perf_counter() - t0)), "weather": weather, "level": level,
                           "group_stats": r.get("group_stats", [])},
-                "downloads": {k: f"/api/download/{task_id}/{k}" for k in ("pcd", "bin", "labels", "zip")}}
+                "downloads": {k: f"/api/download/{task_id}/{k}" for k in ("pcd", "ply", "bin", "labels", "zip")}}
 
     def _preview(self, orig, aug, inserted, existing, statuses=None, preds=None) -> dict:
         from task_a.merge import points_in_new_box
@@ -193,7 +195,9 @@ class Engine:
         return {"original": o_pts, "augmented": a_pts, "obj": a_obj, "boxes": boxes, "preds": preds or []}
 
     # ---------- camera ----------
-    def cameras(self, task_id: str, statuses: Optional[Dict[int, str]] = None) -> dict:
+    def cameras(self, task_id: str, statuses: Optional[Dict[int, str]] = None, paste: bool = False) -> dict:
+        """6 camera + box chiếu. paste: dán ảnh object cắt từ ảnh gốc (utils/camera_paste.py); "paste" trong kết
+        quả đếm trạng thái dán theo (camera, object)."""
         from task_a.merge import points_in_new_box
         from utils.camera_proj import SURROUND, surround
         from utils.nuscenes_loader import load_bin
@@ -207,8 +211,10 @@ class Engine:
                  for i, a in enumerate(st["annotations"])]
         boxes += [dict(a, inserted=False, status="real") for a in st["existing"]]
         lvl = st["level"] or (WEATHER_LEVELS.get(st["weather"]) or [None])[-1]
+        counts = {}
         res = surround(self.nusc, st["sample_token"], boxes, aug[obj],
-                       weather=None if st["weather"] == "none" else st["weather"], level=lvl)
+                       weather=None if st["weather"] == "none" else st["weather"], level=lvl,
+                       paste=paste, paste_status=counts, paste_cache=self._paste_cache)
         out = []
         for cam in SURROUND:
             img, n = res[cam]
@@ -216,7 +222,7 @@ class Engine:
             img.save(buf, "JPEG", quality=82)
             out.append({"channel": cam, "objects": n,
                         "image": "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()})
-        return {"cameras": out, "weather": st["weather"]}
+        return {"cameras": out, "weather": st["weather"], "paste": counts if paste else None}
 
     # ---------- detector trực tiếp ----------
     def detect(self, task_id: str) -> dict:

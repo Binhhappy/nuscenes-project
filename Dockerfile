@@ -17,6 +17,7 @@ RUN pip install --no-cache-dir --retries 10 --timeout 120 -r webapp/requirements
 COPY n3-08c/ n3-08c/
 COPY webapp/ webapp/
 COPY docs/ docs/
+COPY assets/ assets/
 COPY run_app.py .
 RUN mkdir -p webapp/temp_outputs output datasets
 
