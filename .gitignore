@@ -10,3 +10,10 @@ __pycache__/
 .pytest_cache/
 .vscode/
 .idea/
+
+# web demo: file sinh tạm
+webapp/temp_outputs/
+
+# site tĩnh sinh bởi deploy/build_static.py
+deploy/hf_static/
+output/videos/_promo_work/

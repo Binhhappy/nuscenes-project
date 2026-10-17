@@ -1,0 +1,91 @@
+<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>N3-08C Slides</title><style>
+:root{--bg:#f6f5f2;--ink:#141413;--ink2:#55534e;--line:#e3e1db;--accent:#2a78d6}
+*{box-sizing:border-box}html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:20px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.slide{display:none;position:absolute;inset:0;padding:48px 64px 70px;overflow:auto}.slide.on{display:block}
+.tag{color:var(--accent);font-weight:600;font-size:15px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
+h1{font-size:44px;margin:40px 0 18px;line-height:1.15}h2{font-size:32px;margin:0 0 18px}h3{font-size:20px;margin:0 0 8px}
+.lead{font-size:24px;max-width:1000px}.muted{color:var(--ink2);font-size:17px}a{color:var(--accent)}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin:10px 0 20px}
+.big{background:#fff;border:1px solid var(--line);border-radius:12px;padding:18px;color:var(--ink2);font-size:17px}.big b{display:block;font-size:44px;color:var(--ink)}
+.steps li{margin:8px 0}.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:24px}
+.row{display:grid;grid-template-columns:1fr 1.2fr;gap:28px;align-items:start}
+table{border-collapse:collapse;font-size:18px;margin-bottom:14px}th,td{border-bottom:1px solid var(--line);padding:7px 12px;text-align:left}th{color:var(--ink2)}
+.img{max-width:100%;max-height:62vh;border:1px solid var(--line);border-radius:8px;background:#fff}.img.wide{max-height:44vh}
+video{width:100%;border-radius:8px;background:#000}
+.bar{position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:space-between;align-items:center;padding:10px 20px;color:var(--ink2);font-size:15px}
+.bar button{border:1px solid var(--line);background:#fff;border-radius:6px;padding:6px 14px;font:inherit;cursor:pointer}
+@media(max-width:900px){.row,.grid3{grid-template-columns:1fr}.slide{padding:24px 16px 70px}h1{font-size:32px}}
+</style></head><body><section class="slide"><div class="tag">N3-08C</div><h1>Sinh edge case LiDAR cho giao thông Việt Nam</h1>
+<p class="lead">Chèn vật thể, kịch bản và thời tiết Việt Nam vào point cloud thật của nuScenes — đúng vật lý LiDAR —
+rồi chứng minh dữ liệu sinh ra phơi bày được điểm yếu mà dữ liệu gốc không cho thấy.</p>
+<p class="muted">Detector: CenterPoint-PointPillar pretrained nuScenes · Đánh giá: nuScenes mini_val · Demo: <a href="index.html">index.html</a></p></section><section class="slide"><div class="tag">1. Vấn đề</div><h2>nuScenes (Boston / Singapore) thiếu giao thông Việt Nam</h2>
+<div class="grid3"><div class="big"><b>0%</b>khung có bầy ≥ 5 xe máy (tối đa 2 xe)</div>
+<div class="big"><b>0.5%</b>khung có xe cắt đầu</div>
+<div class="big"><b>0</b>mẫu xe ba gác, xe máy chở hàng, xe hàng rong, xe bò</div></div>
+<p>Hệ quả đo được: ngay trên dữ liệu thật, detector chỉ tìm ra <b>55%</b> xe máy
+(ô tô 93%, người 95%) — lớp phương tiện phổ biến nhất ở Việt Nam lại là lớp yếu nhất.</p>
+<p class="muted">Tự thu LiDAR ở Việt Nam: cần xe gắn cảm biến, gán nhãn 3D, chờ gặp đủ tình huống hiếm → đắt và chậm.</p></section><section class="slide"><div class="tag">2. Giải pháp</div><h2>Sinh dữ liệu trên nền LiDAR thật</h2><ol class="steps">
+<li><b>Cảnh nền thật</b>: khung LiDAR nuScenes + 9 lần quét trước (như model đọc)</li>
+<li><b>Vật thể</b>: cắt mẫu object thật, hoặc dựng hình theo kích thước công bố rồi bắn đúng 32 tia Velodyne HDL-32E</li>
+<li><b>Kịch bản VN</b>: luật vị trí / hướng / tốc độ theo xe ego, nhiều khung liên tục</li>
+<li><b>Ghép theo vật lý</b>: mật độ theo khoảng cách, chỉ mặt nhìn thấy, che khuất 2 chiều, mặt đất cục bộ</li>
+<li><b>Thời tiết</b>: mưa, sương, giông bão (mưa rất to + mặt đường ướt + bụi nước sau bánh xe)</li>
+<li><b>Đo có đối chứng</b>: cùng vật thể, cùng cách chèn, chỉ khác tình huống</li></ol></section><section class="slide"><div class="tag">2. Danh mục</div><h2>22 kịch bản đã sinh</h2><div class="cols">
+<div><h3>Giao thông</h3><ul><li>Bầy 10-20 xe máy</li><li>Xe máy cắt đầu</li><li>Xe ngược chiều</li><li>Người băng đường: 1 / nhóm 3-8 / đám đông 10-20</li><li>Xe đỗ lấn làn</li></ul></div>
+<div><h3>Vật thể Việt Nam</h3><ul><li>Xe máy chở 2-3 người</li><li>Xe máy chở hàng cồng kềnh</li><li>Xe ba gác, xe máy kéo thùng</li><li>Xe hàng rong</li><li>Chó lao ra, trâu bò, xe bò</li></ul></div>
+<div><h3>Kết hợp + thời tiết</h3><ul><li>Giờ cao điểm</li><li>Phố chợ</li><li>Chó giữa bầy xe</li><li>Mưa / sương / giông bão × mọi kịch bản</li></ul></div></div></section><section class="slide"><div class="tag">2. Dữ liệu có thật không?</div><h2>Kiểm chứng dữ liệu sinh ra</h2><table>
+<tr><th>Kiểm chứng</th><th>Kết quả</th></tr>
+<tr><td>Mật độ điểm xe chèn so với xe thật cùng khoảng cách</td><td>0.98 lần</td></tr>
+<tr><td>Detector thấy xe máy chèn (vị trí bình thường) như xe máy thật</td><td>93%</td></tr>
+<tr><td>Ô tô ray-cast so với ô tô thật</td><td>93% vs 93% → đạt</td></tr>
+<tr><td>Xe máy ray-cast so với xe máy thật</td><td>64% vs 94% → chưa đạt, chỉ so tương đối</td></tr></table>
+<img src="assets/report/vn_closeup.png" class="img"></section><section class="slide"><div class="tag">3. Kết quả: bầy xe máy</div><h2>Bầy xe máy là điểm yếu thật</h2>
+<div class="row"><div><table><tr><th>Xe máy</th><th>Recall</th><th>CI 95%</th></tr>
+<tr><td>Đối chứng (đi cùng chiều)</td><td>93%</td><td>91–96%</td></tr>
+<tr><td><b>Bầy 10-20 xe</b></td><td><b>81%</b></td><td>79–83%</td></tr>
+<tr><td>Cắt đầu 3-8 m</td><td>100%</td><td></td></tr></table>
+<p><b>-12 điểm</b> (CI -15 .. -9) — có ý nghĩa thống kê.
+Cùng số điểm LiDAR vẫn kém hơn; bầy càng đông càng kém; lỗi chính: xe máy bị nhận thành <b>ô tô</b>.</p></div>
+<img src="assets/cases/cam_moto_swarm.png" class="img"></div></section><section class="slide"><div class="tag">3. Kết quả: vật thể Việt Nam</div><h2>Xe máy chở hàng cồng kềnh: tụt mạnh nhất</h2>
+<div class="row"><div><table><tr><th>Kịch bản</th><th>Recall</th></tr>
+<tr><td>Đối chứng xe máy ray-cast</td><td>64%</td></tr>
+<tr><td>Chở 2-3 người</td><td>60% (không khác biệt)</td></tr>
+<tr><td><b>Chở hàng cồng kềnh</b></td><td><b>29%</b> (-35 điểm)</td></tr>
+<tr><td>Xe ba gác (thấy vật cản)</td><td>96%</td></tr>
+<tr><td>Chó lao ra (thấy vật cản)</td><td>94%</td></tr>
+<tr><td>Trâu / bò</td><td>98%</td></tr></table>
+<p>Khối hàng rộng 1-1.8 m làm xe máy không giống xe máy nào trong dữ liệu train → bị nhận thành ô tô / xe đạp, 21% bị sót hẳn.</p></div>
+<img src="assets/cases/cam_cargo_moto.png" class="img"></div></section><section class="slide"><div class="tag">3. Kết quả: người đi bộ</div><h2>Đông người không làm detector yếu đi</h2>
+<div class="row"><div><table><tr><th>Số người</th><th>Recall</th></tr>
+<tr><td>1 người (jaywalk)</td><td>100%</td></tr><tr><td>nhóm 3-8 người</td><td>99%</td></tr><tr><td>đám đông 10-20</td><td>99%</td></tr></table>
+<p>nuScenes có rất nhiều đám người đi bộ nhưng <b>0%</b> bầy xe máy → model yếu <b>đúng chỗ dữ liệu train thiếu</b>.
+Đây là bằng chứng cho pain point: cần dữ liệu đúng tình huống Việt Nam.</p></div>
+<img src="assets/cases/cam_ped_crowd.png" class="img"></div></section><section class="slide"><div class="tag">3. Kết quả: thời tiết</div><h2>Thời tiết xấu cộng dồn với tình huống khó</h2><table>
+<tr><th>Recall</th><th>Trời trong</th><th>Mưa to</th><th>Sương dày</th><th>Giông / bão</th></tr>
+<tr><td>Ô tô</td><td>93%</td><td>80%</td><td>73%</td><td>71%</td></tr>
+<tr><td>Người đi bộ</td><td>95%</td><td>64%</td><td>51%</td><td><b>55%</b></td></tr>
+<tr><td>Xe máy trong bầy</td><td>80%</td><td>64%</td><td>76%</td><td><b>57%</b></td></tr></table>
+<img src="assets/cases/weather_swarm.png" class="img wide"></section><section class="slide"><div class="tag">3. Giới hạn cảm biến</div><h2>LiDAR 32 tia không thấy vật nhỏ ở xa</h2>
+<p>Số điểm LiDAR trên con chó (cao 0.6 m): <b>15</b> điểm ở 10 m, <b>4</b> ở 20 m,
+<b>0</b> ở 40 m. LiDAR 128 tia: 14 điểm ở 20 m.
+Đây là giới hạn phần cứng, không phải của model.</p><img src="assets/report/lidar_beams.png" class="img wide"></section><section class="slide"><div class="tag">Demo</div><h2>Demo trực quan</h2><div class="cols">
+<div><video src="assets/videos/scene-0103_swarm_pretrained.mp4" controls poster="assets/videos/scene-0103_swarm_pretrained.png"></video><p>Bầy xe máy</p></div>
+<div><video src="assets/videos/scene-0103_cargo_pretrained.mp4" controls poster="assets/videos/scene-0103_cargo_pretrained.png"></video><p>Xe máy chở hàng</p></div>
+<div><video src="assets/videos/scene-0103_swarm_storm.mp4" controls poster="assets/videos/scene-0103_swarm_storm.png"></video><p>Bầy xe trong giông bão</p></div></div>
+<p>Xem 3D từng trường hợp, góc nhìn camera, thời tiết: <a href="index.html#cases">mở trang demo</a></p></section><section class="slide"><div class="tag">Kết luận</div><h2>Kết luận và hạn chế</h2><div class="cols">
+<div><h3>Đã chứng minh</h3><ul><li>Sinh được edge case Việt Nam trên nền LiDAR thật, đúng vật lý cảm biến</li>
+<li>Dữ liệu chèn được detector nhận như dữ liệu thật (xe cắt mẫu, ô tô ray-cast)</li>
+<li>Phơi bày điểm yếu có ý nghĩa thống kê: bầy xe máy, xe chở hàng, giông bão</li>
+<li>Chỉ ra giới hạn phần cứng: vật nhỏ ở xa</li></ul></div>
+<div><h3>Hạn chế / tiếp theo</h3><ul><li>nuScenes mini, 6 xe máy để cắt mẫu</li>
+<li>Xe máy dựng hình chưa giống thật (cần mesh 3D)</li><li>Tham số thời tiết chưa hiệu chỉnh bằng đo thật</li>
+<li>Fine-tune bằng dữ liệu VN: chưa thành công, là bước tiếp theo</li></ul></div></div></section>
+<div class="bar"><button onclick="go(-1)">← Trước</button><span id="pg"></span><button onclick="go(1)">Sau →</button></div>
+<script>
+const S=[...document.querySelectorAll(".slide")];let i=Math.max(0,Math.min(S.length-1,(parseInt(location.hash.slice(1))||1)-1));
+function render(){S.forEach((s,k)=>s.classList.toggle("on",k===i));document.getElementById("pg").textContent=(i+1)+" / "+S.length;history.replaceState(null,"","#"+(i+1));}
+function go(d){i=Math.max(0,Math.min(S.length-1,i+d));document.querySelectorAll("video").forEach(v=>v.pause());render();}
+document.addEventListener("keydown",e=>{if(["ArrowRight","PageDown"," "].includes(e.key)){e.preventDefault();go(1);}if(["ArrowLeft","PageUp"].includes(e.key))go(-1);});
+render();
+</script></body></html>

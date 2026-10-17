@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>N3-08C Web Demo</title>
+<script src="/static/vendor/tailwind.js"></script>
+<script>
+tailwind.config = {theme: {extend: {colors: {dark: {950: "#07090e", 900: "#0b0f17", 800: "#111827", 700: "#1a2233", 600: "#243047", 500: "#334155"}}}}};
+</script>
+<link rel="stylesheet" href="/static/vendor/fa/css/all.min.css">
+<style>
+ body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+ .sel{background:#111827;border:1px solid #334155;border-radius:.5rem;padding:.4rem .5rem;font-size:.78rem;color:#a5f3fc;width:100%}
+ .btn{border-radius:.5rem;padding:.35rem .7rem;font-size:.75rem;font-weight:700;transition:.15s}
+ .seg button{padding:.25rem .55rem;font-size:.72rem;border-radius:.4rem;color:#cbd5e1;background:#1a2233}
+ .seg button.on{background:#0891b2;color:#fff}
+ .tab{padding:.6rem 1rem;font-size:.78rem;font-weight:700;color:#94a3b8;border-bottom:2px solid transparent}
+ .tab.on{color:#22d3ee;border-color:#22d3ee}
+ .cam{position:relative;border:2px solid #243047;border-radius:.5rem;overflow:hidden;cursor:zoom-in;background:#000}
+ .cam.hit{border-color:#c084fc}.cam img{width:100%;aspect-ratio:16/9;object-fit:cover;display:block}
+ .cam .lab{position:absolute;left:0;top:0;background:#000b;color:#fff;font-size:11px;padding:2px 7px;border-bottom-right-radius:6px}
+ .cam .badge{position:absolute;right:6px;top:4px;background:#9333ea;color:#fff;font-size:11px;border-radius:9px;padding:0 7px}
+ table{width:100%;font-size:.78rem}th,td{padding:.35rem .5rem;border-bottom:1px solid #243047;text-align:right}th:first-child,td:first-child{text-align:left}
+ th{color:#94a3b8;font-weight:600}
+ .leg i{display:inline-block;width:14px;height:3px;margin-right:5px;vertical-align:middle}
+</style>
+</head>
+<body class="bg-dark-950 text-slate-200 h-screen flex flex-col overflow-hidden">
+<header class="flex items-center justify-between px-4 border-b border-dark-600 bg-dark-900">
+ <div class="flex items-center gap-3 py-2">
+  <i class="fa-solid fa-satellite-dish text-cyan-400 text-lg"></i>
+  <div><div class="font-extrabold text-sm">N3-08C — Edge case LiDAR giao thông Việt Nam</div>
+   <div class="text-[11px] text-slate-400">nuScenes thật + vật thể / kịch bản / thời tiết VN · đúng vật lý LiDAR HDL-32E</div></div>
+ </div>
+ <nav class="flex">
+  <button class="tab on" data-view="gen"><i class="fa-solid fa-wand-magic-sparkles mr-1"></i>Sinh kịch bản</button>
+  <button class="tab" data-view="cases"><i class="fa-solid fa-cubes mr-1"></i>Trường hợp đã đo</button>
+  <button class="tab" data-view="results"><i class="fa-solid fa-chart-column mr-1"></i>Kết quả đo</button>
+ </nav>
+ <div class="flex gap-2">
+  <a href="/slides" target="_blank" class="btn bg-dark-700 hover:bg-dark-600"><i class="fa-solid fa-person-chalkboard mr-1"></i>Slide</a>
+  <a href="/docs" target="_blank" class="btn bg-dark-700 hover:bg-dark-600"><i class="fa-solid fa-code mr-1"></i>API</a>
+ </div>
+</header>
+
+<!-- ===== Sinh kịch bản ===== -->
+<main id="view-gen" class="flex-1 flex overflow-hidden">
+ <aside class="w-80 shrink-0 bg-dark-900 border-r border-dark-600 overflow-y-auto p-4 space-y-4 text-xs">
+  <div><label class="font-bold text-slate-300">1. Cảnh nền nuScenes</label>
+   <select id="sel-sample" class="sel mt-1"></select>
+   <p id="sample-desc" class="text-[11px] text-slate-500 mt-1"></p></div>
+  <div><label class="font-bold text-slate-300">2. Kịch bản</label>
+   <div class="seg flex gap-1 mt-1" id="seg-mode"><button data-v="preset" class="on">Kịch bản có sẵn</button><button data-v="custom">Tự chọn vật thể</button></div>
+   <div id="preset-box"><select id="sel-scenario" class="sel mt-2"></select>
+    <p id="scenario-desc" class="text-[11px] text-slate-400 mt-1"></p></div>
+   <div id="custom-box" class="hidden mt-2 space-y-2">
+    <div class="flex flex-wrap gap-1" id="custom-presets"></div>
+    <div id="custom-rows" class="space-y-1.5"></div>
+    <div class="flex items-center justify-between"><button id="btn-add-row" class="btn bg-dark-700 hover:bg-dark-600"><i class="fa-solid fa-plus mr-1"></i>Thêm loại</button>
+     <span class="text-slate-400">Tổng: <b id="custom-total" class="text-cyan-300">0</b> object</span></div>
+    <p class="text-[11px] text-slate-500">"(thật)" = cắt mẫu object thật nuScenes; còn lại dựng hình + bắn tia HDL-32E. Không phải cảnh nào cũng đặt đủ: vị trí phải hợp lệ (lòng đường, không va chạm, có mẫu hợp góc nhìn).</p>
+   </div>
+   <div class="flex items-center gap-2 mt-2"><span class="text-slate-400">Seed</span>
+    <input id="inp-seed" type="number" value="42" min="0" class="sel !w-24"><button id="btn-rand" class="btn bg-dark-700" title="seed ngẫu nhiên"><i class="fa-solid fa-dice"></i></button>
+    <label class="flex items-center gap-1 text-[11px] text-slate-400" title="Bật: sinh lại cho đúng kết quả cũ. Tắt: mỗi lần bấm Sinh lại đổi seed để ra kịch bản mới"><input id="chk-keep-seed" type="checkbox" class="accent-cyan-500">Giữ seed</label></div></div>
+  <div><label class="font-bold text-slate-300">3. Thời tiết</label>
+   <div class="grid grid-cols-2 gap-2 mt-1"><select id="sel-weather" class="sel"></select><select id="sel-level" class="sel"></select></div>
+   <div id="puddle-box" class="hidden mt-2"><span class="text-slate-400">Vũng nước: <b id="puddle-val" class="text-cyan-300">0</b></span>
+    <input id="inp-puddles" type="range" min="0" max="20" value="0" class="w-full accent-cyan-500"></div>
+   <p class="text-[11px] text-slate-500 mt-1">Thời tiết mô phỏng trên LiDAR; ảnh camera được phủ hiệu ứng tương ứng để minh hoạ.</p></div>
+  <label class="flex items-start gap-2"><input id="chk-sweeps" type="checkbox" class="mt-0.5 accent-cyan-500">
+   <span>Sinh đủ 10 sweep (chậm hơn ~5×) — cần để chạy detector</span></label>
+  <button id="btn-run" class="w-full py-3 rounded-xl font-extrabold text-sm bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 shadow-lg shadow-cyan-500/20">
+   <i class="fa-solid fa-bolt mr-1"></i>Sinh kịch bản</button>
+  <div id="stats" class="hidden space-y-1 bg-dark-800 rounded-xl p-3 border border-dark-600"></div>
+  <div id="dl" class="hidden grid grid-cols-2 gap-2">
+   <a id="dl-pcd" class="btn bg-cyan-700 hover:bg-cyan-600 text-center"><i class="fa-solid fa-download mr-1"></i>.pcd</a>
+   <a id="dl-ply" class="btn bg-cyan-700 hover:bg-cyan-600 text-center"><i class="fa-solid fa-download mr-1"></i>.ply</a>
+   <a id="dl-bin" class="btn bg-dark-700 hover:bg-dark-600 text-center">.bin nuScenes</a>
+   <a id="dl-labels" class="btn bg-dark-700 hover:bg-dark-600 text-center">labels.json</a>
+   <a id="dl-zip" class="btn bg-indigo-600 hover:bg-indigo-500 text-center">bundle .zip</a></div>
+  <div id="det-box" class="space-y-2"><button id="btn-detect" class="w-full btn py-2 bg-emerald-700 hover:bg-emerald-600 disabled:opacity-40" disabled>
+   <i class="fa-solid fa-crosshairs mr-1"></i>Chạy detector (CenterPoint-PointPillar)</button>
+   <p id="det-note" class="text-[11px] text-slate-500"></p></div>
+ </aside>
+ <section class="flex-1 flex flex-col min-w-0">
+  <div class="flex flex-wrap items-center gap-3 px-3 py-2 bg-dark-900 border-b border-dark-600 text-xs">
+   <div class="seg flex gap-1" id="seg-color"><button data-v="z" class="on">Độ cao Z</button><button data-v="intensity">Cường độ</button><button data-v="object">Làm nổi object chèn</button></div>
+   <div class="seg flex gap-1" id="seg-disp"><button data-v="augmented" class="on">Sau khi chèn</button><button data-v="original">Gốc</button><button data-v="both">Cả hai</button></div>
+   <div class="seg flex gap-1" id="seg-view"><button data-v="iso" class="on">3D</button><button data-v="bev">BEV</button><button data-v="driver">Góc lái xe</button></div>
+   <label class="flex items-center gap-1 text-slate-400">Cỡ điểm<input id="inp-psize" type="range" min="0.04" max="0.3" step="0.01" value="0.1" class="w-20 accent-cyan-500"></label>
+  </div>
+  <div class="relative flex-1 min-h-0"><div id="viewer-gen" class="absolute inset-0"></div>
+   <div id="loading" class="hidden absolute inset-0 bg-dark-950/80 flex flex-col items-center justify-center text-cyan-300"><i class="fa-solid fa-spinner fa-spin text-3xl mb-2"></i><span id="loading-text">Đang sinh…</span></div>
+   <div class="leg absolute left-3 bottom-2 text-[11px] text-slate-300 bg-dark-900/80 rounded px-2 py-1 flex flex-wrap gap-3">
+    <span><i style="background:#fbbf24"></i>object chèn</span><span><i style="background:#22c55e"></i>detector đúng</span><span><i style="background:#ef4444"></i>bỏ sót</span><span><i style="background:#f59e0b"></i>nhầm lớp</span><span><i style="background:#60a5fa"></i>prediction</span><span><i style="background:#c084fc;height:7px;width:7px;border-radius:50%"></i>điểm LiDAR object chèn</span><span><i style="background:#94a3b8"></i>object thật (mờ)</span></div></div>
+  <div class="bg-dark-900 border-t border-dark-600 p-2">
+   <div class="flex items-center justify-between text-xs mb-1"><b class="text-slate-300"><i class="fa-solid fa-camera mr-1"></i>6 camera quanh xe — ảnh thật, object chèn hiện qua box + điểm LiDAR chiếu lên</b>
+    <span class="flex items-center gap-2"><label class="flex items-center gap-1 text-slate-400" title="Cắt ảnh object từ chính ảnh camera gốc của nó trong nuScenes, biến đổi phối cảnh rồi dán vào vị trí chèn. Chỉ dán khi tìm được ảnh nguồn đạt tiêu chí (rõ, không bị che, cùng góc nhìn, cùng điều kiện sáng)"><input id="chk-paste" type="checkbox" checked class="accent-cyan-500">Dán ảnh object</label>
+    <span id="paste-info" class="text-[11px] text-slate-500"></span>
+    <button id="btn-cam-toggle" class="btn bg-dark-700">Thu gọn</button></span></div>
+   <div id="cams-gen" class="grid grid-cols-6 gap-2"></div></div>
+ </section>
+</main>
+
+<!-- ===== Trường hợp đã đo ===== -->
+<main id="view-cases" class="hidden flex-1 flex overflow-hidden">
+ <aside id="case-list" class="w-80 shrink-0 bg-dark-900 border-r border-dark-600 overflow-y-auto p-3 space-y-1 text-xs"></aside>
+ <section class="flex-1 flex flex-col min-w-0">
+  <div id="case-info" class="px-3 py-2 bg-dark-900 border-b border-dark-600 text-xs"></div>
+  <div id="player" class="hidden flex items-center gap-3 px-3 py-2 bg-dark-800 border-b border-dark-600 text-xs">
+   <button id="pl-prev" class="btn bg-dark-700" title="khung trước"><i class="fa-solid fa-backward-step"></i></button>
+   <button id="pl-play" class="btn bg-cyan-700 w-16"><i class="fa-solid fa-play"></i></button>
+   <button id="pl-next" class="btn bg-dark-700" title="khung sau"><i class="fa-solid fa-forward-step"></i></button>
+   <input id="pl-slider" type="range" min="0" max="0" value="0" class="flex-1 accent-cyan-500">
+   <span id="pl-label" class="font-mono text-cyan-300 w-40 text-right"></span>
+   <select id="pl-fps" class="sel !w-20"><option value="1">1 khung/s</option><option value="2" selected>2 khung/s</option><option value="4">4 khung/s</option></select>
+   <button id="pl-video" class="btn bg-indigo-600 hover:bg-indigo-500"><i class="fa-solid fa-film mr-1"></i>Video MP4</button>
+  </div>
+  <div class="relative flex-1 min-h-0"><div id="viewer-case" class="absolute inset-0"></div></div>
+  <div class="bg-dark-900 border-t border-dark-600 p-2"><div id="cams-case" class="grid grid-cols-6 gap-2"></div></div>
+ </section>
+</main>
+
+<!-- ===== Kết quả đo ===== -->
+<main id="view-results" class="hidden flex-1 overflow-y-auto p-6 space-y-6">
+ <div id="kpis" class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3"></div>
+ <div class="grid xl:grid-cols-2 gap-6" id="tables"></div>
+ <div><h3 class="font-bold mb-2">Biểu đồ</h3><div id="charts" class="grid md:grid-cols-2 gap-4"></div></div>
+ <div><h3 class="font-bold mb-2">Video</h3><div id="videos" class="grid md:grid-cols-2 xl:grid-cols-3 gap-4"></div></div>
+ <p class="text-xs text-slate-500">Mọi số trên trang đọc trực tiếp từ output/ (detector CenterPoint-PointPillar pretrained chạy thật trên nuScenes mini_val, CI 95% bootstrap theo khung). Chi tiết: docs/bao_cao_ket_qua.md.</p>
+</main>
+
+<div id="lightbox" class="hidden fixed inset-0 z-50 bg-black/90 flex items-center justify-center cursor-zoom-out"><img class="max-w-[96vw] max-h-[92vh] rounded"></div>
+<div id="videobox" class="hidden fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center p-4">
+ <video controls class="max-w-[96vw] max-h-[85vh] rounded"></video>
+ <button id="videobox-close" class="btn bg-dark-700 mt-3"><i class="fa-solid fa-xmark mr-1"></i>Đóng (Esc)</button></div>
+<script src="/static/vendor/three.min.js"></script>
+<script src="/static/vendor/OrbitControls.js"></script>
+<script src="/static/js/viewer3d.js"></script>
+<script src="/static/js/app.js"></script>
+</body>
+</html>

@@ -26,18 +26,31 @@ from utils.nuscenes_loader import get_annotations, get_pointcloud, load_nuscenes
 from utils.transforms import points_in_cuboid, quaternion_to_yaw, to_local_frame, wrap_angle  # noqa: E402
 
 META_KEYS = ("ann_token", "sample_token", "scene_token", "category", "size",
-             "distance", "view_angle", "num_points")
+             "distance", "view_angle", "num_points", "attributes")
 
 
 def _matches(category: str, prefixes: Optional[Sequence[str]]) -> bool:
     return not prefixes or any(category.startswith(p) for p in prefixes)
 
 
+def attribute_names(nusc, ann_token: str) -> List[str]:
+    """Attribute nuScenes của annotation, vd ["cycle.with_rider"], ["vehicle.parked"]."""
+    return [nusc.get("attribute", t)["name"] for t in nusc.get("sample_annotation", ann_token)["attribute_tokens"]]
+
+
+def has_required_attributes(template: dict,
+                            required: Optional[Dict[str, str]] = config.TEMPLATE_REQUIRED_ATTRIBUTES) -> bool:
+    """required: {prefix category: attribute bắt buộc}. Category không có trong required thì luôn đạt."""
+    need = [attr for prefix, attr in (required or {}).items() if template["category"].startswith(prefix)]
+    return all(attr in template.get("attributes", ()) for attr in need)
+
+
 def crop_template(points: np.ndarray, ann: dict, sample_token: str = "", scene_token: str = "",
-                  ground_margin: float = config.TEMPLATE_GROUND_MARGIN) -> dict:
+                  ground_margin: float = config.TEMPLATE_GROUND_MARGIN, attributes: Sequence[str] = ()) -> dict:
     """Crop points (sensor frame) trong annotation ann (sensor frame) -> template.
 
     ground_margin: bỏ điểm có z_local < -h/2 + ground_margin (mặt đường lẫn trong đáy box).
+    attributes: attribute nuScenes của annotation (attribute_names), lưu vào template để lọc.
     """
     mask = points_in_cuboid(points, ann["translation"], ann["size"], ann["rotation"])
     local = to_local_frame(points[mask], ann["translation"], ann["rotation"]).astype(np.float32)
@@ -57,6 +70,7 @@ def crop_template(points: np.ndarray, ann: dict, sample_token: str = "", scene_t
         # thì mặt object mà LiDAR thấy vẫn khớp với template.
         "view_angle": float(wrap_angle(np.arctan2(cy, cx) - quaternion_to_yaw(ann["rotation"]))),
         "num_points": int(len(local)),
+        "attributes": list(attributes),
     }
 
 
@@ -66,13 +80,14 @@ def extract_object_template(nusc, sample_token: str, annotation_token: str,
 
     Returns dict:
         points (M, 5) float32 object-local, category, size [w, l, h], ann_token, sample_token,
-        scene_token, distance (m, BEV từ sensor), view_angle (rad), num_points.
+        scene_token, distance (m, BEV từ sensor), view_angle (rad), num_points, attributes.
     """
     ann = next((a for a in get_annotations(nusc, sample_token) if a["token"] == annotation_token), None)
     if ann is None:
         raise ValueError(f"Annotation {annotation_token} không thuộc sample {sample_token}")
     scene = nusc.get("sample", sample_token)["scene_token"]
-    return crop_template(get_pointcloud(nusc, sample_token), ann, sample_token, scene, ground_margin)
+    return crop_template(get_pointcloud(nusc, sample_token), ann, sample_token, scene, ground_margin,
+                         attribute_names(nusc, annotation_token))
 
 
 def extract_all_templates(nusc, sample_token: str, categories: Optional[Sequence[str]] = None,
@@ -88,7 +103,7 @@ def extract_all_templates(nusc, sample_token: str, categories: Optional[Sequence
     for ann in get_annotations(nusc, sample_token):
         if not _matches(ann["category"], categories):
             continue
-        t = crop_template(points, ann, sample_token, scene, ground_margin)
+        t = crop_template(points, ann, sample_token, scene, ground_margin, attribute_names(nusc, ann["token"]))
         if t["num_points"] >= min_points:
             out.append(t)
     return out
@@ -142,7 +157,9 @@ class TemplateBank:
         for tok in tqdm(tokens, desc="Building template bank", disable=not progress):
             for t in extract_all_templates(nusc, tok, categories, min_points, ground_margin):
                 path = save_template(t, self.root)
-                self.meta.append({k: t[k] for k in META_KEYS} | {"file": os.path.relpath(path, self.root)})
+                # "/" để bank build trên Windows đọc được trên Linux (WSL, T6) và ngược lại
+                rel = os.path.relpath(path, self.root).replace(os.sep, "/")
+                self.meta.append({k: t[k] for k in META_KEYS} | {"file": rel})
         os.makedirs(self.root, exist_ok=True)
         with open(self.index_path, "w", encoding="utf-8") as f:
             json.dump(self.meta, f, indent=1)
@@ -155,12 +172,30 @@ class TemplateBank:
         return self
 
     def load_or_build(self, nusc, **build_kwargs) -> "TemplateBank":
-        return self.load() if self.exists() else self.build(nusc, **build_kwargs)
+        return self.ensure_attributes(nusc) if self.exists() else self.build(nusc, **build_kwargs)
+
+    def ensure_attributes(self, nusc) -> "TemplateBank":
+        """Bank build trước khi có trường attributes: bổ sung từ metadata nuScenes (không crop lại),
+        ghi lại bank.json. Bank đã đủ thì không làm gì."""
+        if not self.meta and self.exists():
+            self.load()
+        missing = [m for m in self.meta if "attributes" not in m]
+        for m in missing:
+            m["attributes"] = attribute_names(nusc, m["ann_token"])
+        if missing:
+            with open(self.index_path, "w", encoding="utf-8") as f:
+                json.dump(self.meta, f, indent=1)
+        return self
 
     def filter(self, categories: Optional[Sequence[str]] = None, min_points: int = 0,
                exclude_samples: Iterable[str] = (), exclude_scenes: Iterable[str] = (),
-               distance_range: Optional[Tuple[float, float]] = None) -> List[dict]:
-        """Metadata thoả điều kiện. exclude_scenes: tránh chèn lại chính instance đã có trong scene đích."""
+               distance_range: Optional[Tuple[float, float]] = None,
+               required_attributes: Optional[Dict[str, str]] = None) -> List[dict]:
+        """Metadata thoả điều kiện. exclude_scenes: tránh chèn lại chính instance đã có trong scene đích.
+
+        required_attributes: {prefix category: attribute}, vd config.TEMPLATE_REQUIRED_ATTRIBUTES để chỉ lấy
+        xe 2 bánh có người lái (nuScenes: phần lớn box xe 2 bánh là xe đỗ). Cần bank có attributes.
+        """
         ex_samples, ex_scenes = set(exclude_samples), set(exclude_scenes)
         out = []
         for m in self.meta:
@@ -170,6 +205,8 @@ class TemplateBank:
                 continue
             if distance_range and not distance_range[0] <= m["distance"] <= distance_range[1]:
                 continue
+            if required_attributes and not has_required_attributes(m, required_attributes):
+                continue
             out.append(m)
         return out
 
@@ -177,7 +214,8 @@ class TemplateBank:
         """Template đầy đủ (có points) từ 1 entry metadata."""
         key = meta["ann_token"]
         if key not in self._cache:
-            self._cache[key] = load_template(os.path.join(self.root, meta["file"]))["points"]
+            rel = meta["file"].replace("\\", "/")  # bank cũ build trên Windows lưu "\\"
+            self._cache[key] = load_template(os.path.join(self.root, *rel.split("/")))["points"]
         return dict(meta, points=self._cache[key])
 
     def sample(self, n: int, rng: Optional[np.random.Generator] = None, balance: bool = True,

@@ -1,0 +1,12 @@
+services:
+  n308c-web:
+    build: .
+    container_name: n308c_web_demo
+    ports:
+      - "8050:8050"
+    volumes:
+      - ./datasets:/app/datasets:ro          # nuScenes v1.0-mini
+      - ./output:/app/output                 # template bank + kết quả đo (report, cases, videos)
+      - ./webapp/temp_outputs:/app/webapp/temp_outputs
+      - ./docs/demo:/app/docs/demo:ro        # slide + ảnh cho /slides
+    restart: unless-stopped

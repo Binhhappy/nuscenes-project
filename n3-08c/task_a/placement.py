@@ -14,7 +14,7 @@ from shapely.geometry.base import BaseGeometry
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import config  # noqa: E402
-from utils.transforms import quaternion_to_yaw, yaw_to_quaternion  # noqa: E402
+from utils.transforms import quaternion_to_yaw, wrap_angle, yaw_to_quaternion  # noqa: E402
 
 Position = Tuple[float, float, float]  # (x, y, yaw)
 
@@ -36,10 +36,14 @@ def bev_iou(a: Polygon, b: Polygon) -> float:
     return inter / (a.area + b.area - inter + 1e-9)
 
 
-def check_collision_bev(new_box: dict, existing_boxes: Sequence[dict]) -> bool:
-    """True nếu new_box có BEV IoU > COLLISION_IOU_THRESH với bất kỳ box nào."""
+def check_collision_bev(new_box: dict, existing_boxes: Sequence[dict], margin: float = 0.0) -> bool:
+    """True nếu new_box có BEV IoU > COLLISION_IOU_THRESH với bất kỳ box nào.
+
+    margin (m): nới footprint của new_box ra mỗi phía (góc vuông), box cách nhau < margin cũng tính va chạm.
+    """
     fp = box_footprint(new_box)
-    # TODO: buffer footprint thêm margin an toàn (vd 0.3 m) để object không dính sát nhau.
+    if margin > 0:
+        fp = fp.buffer(margin, join_style=2)
     return any(bev_iou(fp, box_footprint(b)) > config.COLLISION_IOU_THRESH for b in existing_boxes)
 
 
@@ -53,6 +57,8 @@ def sample_valid_position(drivable_polygon: BaseGeometry, existing_boxes: Sequen
                           rng: Optional[np.random.Generator] = None) -> Optional[Position]:
     """Rejection sampling: (x, y) đều trong vành khuyên [MIN_DISTANCE, MAX_DISTANCE], yaw ngẫu nhiên.
 
+    Bản cũ, chỉ dùng cho box không có template. Với template thật dùng sample_position_for_template:
+    yaw ngẫu nhiên làm mặt có điểm quay lưng về sensor, r ngẫu nhiên làm sai mật độ điểm.
     Hợp lệ khi: tâm + toàn bộ footprint nằm trong drivable area và không va chạm BEV.
     Returns (x, y, yaw) hoặc None nếu hết n_attempts.
     """
@@ -74,6 +80,76 @@ def sample_valid_position(drivable_polygon: BaseGeometry, existing_boxes: Sequen
             continue
         # TODO: reject nếu box chứa nhiều điểm non-ground (vật cản không có annotation: cột, tường).
         return float(x), float(y), float(yaw)
+    return None
+
+
+REJECT_REASONS = ("off_area", "no_ground", "collision", "obstacle")
+
+
+def count_obstacle_points(points: np.ndarray, center_xy: Sequence[float], size: Sequence[float], yaw: float,
+                          ground_z: float, min_height: float = 0.3) -> int:
+    """Số điểm target nằm trong footprint, cao hơn mặt đất min_height (vật cản không có nhãn: cột, tường)."""
+    c, s = np.cos(yaw), np.sin(yaw)
+    d = points[:, :2] - np.asarray(center_xy[:2])
+    lx, ly = d[:, 0] * c + d[:, 1] * s, -d[:, 0] * s + d[:, 1] * c
+    inside = (np.abs(lx) <= size[1] / 2) & (np.abs(ly) <= size[0] / 2)
+    return int((inside & (points[:, 2] > ground_z + min_height) & (points[:, 2] < ground_z + size[2])).sum())
+
+
+def check_position(area: BaseGeometry, existing_boxes: Sequence[dict], size: Sequence[float],
+                   x: float, y: float, yaw: float, ground=None, points: Optional[np.ndarray] = None,
+                   max_obstacle_points: int = config.MAX_OBSTACLE_POINTS, margin: float = 0.0) -> Optional[str]:
+    """None nếu (x, y, yaw) hợp lệ, ngược lại lý do reject (REJECT_REASONS).
+
+    Hợp lệ: footprint nằm trong area, LiDAR thấy mặt đất tại đó (ground.is_supported), không va chạm BEV
+    (cách box khác >= margin m), ít điểm vật cản không nhãn trong footprint (cần points + ground).
+    """
+    if not area.contains(bev_footprint((x, y), size, yaw)):
+        return "off_area"
+    if ground is not None and not ground.is_supported(x, y):
+        return "no_ground"
+    box = {"translation": [x, y, 0.0], "size": list(size), "rotation": yaw_to_quaternion(yaw)}
+    if check_collision_bev(box, existing_boxes, margin):
+        return "collision"
+    if points is not None and ground is not None and count_obstacle_points(
+            points, (x, y), size, yaw, float(ground.height_at(x, y)[0][0])) > max_obstacle_points:
+        return "obstacle"
+    return None
+
+
+def sample_position_for_template(area: BaseGeometry, existing_boxes: Sequence[dict], template: dict,
+                                 ground=None, points: Optional[np.ndarray] = None, n_attempts: int = 100,
+                                 rng: Optional[np.random.Generator] = None, r_jitter: float = 0.05,
+                                 r_scale_max: float = config.MAX_DISTANCE_SCALE,
+                                 max_obstacle_points: int = config.MAX_OBSTACLE_POINTS,
+                                 stats: Optional[dict] = None,
+                                 margin: float = config.COLLISION_MARGIN) -> Optional[Position]:
+    """Đặt template bằng cách xoay quanh sensor: giữ khoảng cách r và góc nhìn (view_angle) của template.
+
+    Phép xoay quanh trục z của sensor giữ nguyên khoảng cách, góc ngước và mặt mà LiDAR nhìn thấy,
+    nên mật độ điểm và mặt có điểm vẫn đúng vật lý. Chỉ đổi azimuth phi:
+        (x, y) = r (cos phi, sin phi),  yaw = phi - view_angle.
+    r trong [r0 (1 - r_jitter), r0 * max(1 + r_jitter, r_scale_max)], r0 = template["distance"]:
+    chỉ cho dời ra xa nhiều (merge.match_density subsample theo (r0 / r)^2), không kéo lại gần
+    vì không thể tự sinh điểm thật.
+
+    Hợp lệ khi: footprint nằm trong area, LiDAR thấy mặt đất tại đó (ground.is_supported),
+    không va chạm BEV (cách box khác >= margin m), ít điểm vật cản không nhãn trong footprint (cần points + ground).
+    stats: dict đếm lý do reject (REJECT_REASONS), cộng dồn qua các lần gọi.
+    """
+    rng = rng or np.random.default_rng()
+    r0, view = template["distance"], template["view_angle"]
+    for _ in range(n_attempts):
+        r = r0 * rng.uniform(1 - r_jitter, max(1 + r_jitter, r_scale_max))
+        phi = rng.uniform(-np.pi, np.pi)
+        x, y = r * np.cos(phi), r * np.sin(phi)
+        yaw = float(wrap_angle(phi - view))
+        reason = check_position(area, existing_boxes, template["size"], x, y, yaw, ground, points,
+                                max_obstacle_points, margin)
+        if reason is None:
+            return float(x), float(y), yaw
+        if stats is not None:
+            stats[reason] = stats.get(reason, 0) + 1
     return None
 
 

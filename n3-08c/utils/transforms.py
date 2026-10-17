@@ -90,6 +90,14 @@ def box_sensor_to_global(box: dict, calibration: dict, ego_pose: dict) -> dict:
     return {**box, "translation": center.tolist(), "rotation": list(q.elements)}
 
 
+
+def box_global_to_sensor(box: dict, calibration: dict, ego_pose: dict) -> dict:
+    """Annotation dict global frame -> sensor frame (nghịch đảo box_sensor_to_global)."""
+    T = np.linalg.inv(sensor_to_global_matrix(calibration, ego_pose))
+    q = Quaternion(matrix=T[:3, :3]) * Quaternion(box["rotation"])
+    center = apply_transform(np.asarray([box["translation"]], dtype=float), T)[0]
+    return {**box, "translation": center.tolist(), "rotation": list(q.elements)}
+
 if __name__ == "__main__":
     rng = np.random.default_rng(0)
     pts = np.c_[rng.uniform(-2, 2, (1000, 3)), rng.uniform(0, 255, (1000, 2))]
